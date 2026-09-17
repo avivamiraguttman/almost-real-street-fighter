@@ -11,7 +11,7 @@ export const CONFIG = {
   calibMs: 2000,
   // player
   headR: 0.09, fistR: 0.06, footR: 0.07, torsoMinW: 0.25,
-  punchSpeed: 1.2, punchExt: 0.35, punchRearm: 0.25,
+  punchSpeed: 1.2, punchExt: 0.25, punchRearm: 0.15, wristVisMin: 0.5,
   kickSpeed: 1.2, kickLift: 0.25, kickRearm: 0.10,
   blockDist: 0.25, blockFront: 0.02, blockHoldMs: 100,
   punchDmg: 10, kickDmg: 15,
@@ -74,7 +74,7 @@ export function playerGeometry(lms, cfg, lock) {
     nose, hipMid, shoulderMid, floorY, H, Hmeasured, floorMeasured, facingRaw,
     head: { x: nose.x, y: nose.y, r: cfg.headR * H },
     torso: { x: torsoCx - torsoW / 2, y: shoulderMid.y, w: torsoW, h: hipMid.y - shoulderMid.y },
-    wrists: [LM.L_WRIST, LM.R_WRIST].filter((i) => vis(lms[i], cfg)).map((i) => ({ id: i, x: lms[i].x, y: lms[i].y, r: cfg.fistR * H })),
+    wrists: [LM.L_WRIST, LM.R_WRIST].filter((i) => lms[i] && lms[i].visibility >= (cfg.wristVisMin ?? cfg.visMin)).map((i) => ({ id: i, x: lms[i].x, y: lms[i].y, r: cfg.fistR * H })),
     ankle: ankles.length === 2 ? (lms[LM.L_ANKLE].visibility >= lms[LM.R_ANKLE].visibility ? lms[LM.L_ANKLE] : lms[LM.R_ANKLE]) : ankles[0],
   };
 }
