@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
 const PORT = +(process.env.PORT || 8000);
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.mp3': 'audio/mpeg', '.css': 'text/css', '.task': 'application/octet-stream', '.wasm': 'application/wasm' };
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.m4a': 'audio/mp4', '.css': 'text/css', '.task': 'application/octet-stream', '.wasm': 'application/wasm' };
 fs.mkdirSync(path.join(ROOT, 'logs'), { recursive: true });
 http.createServer((req, res) => {
   if (req.method === 'POST' && req.url === '/log') {
