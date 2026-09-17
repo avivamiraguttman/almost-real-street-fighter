@@ -35,6 +35,7 @@ export function drawOpponent(ctx, sprites, opp, boxes, facing, H, wallT) {
   const flip = (facing === 1) === SHEET_FACES_RIGHT;
   ctx.scale(flip ? -s : s, s);
   ctx.imageSmoothingEnabled = false;
+  if (opp.armorFlashUntil && wallT < opp.armorFlashUntil) ctx.filter = 'brightness(1.8) saturate(0.2)'; // armored hit: white flash, no stagger
   if (fr) ctx.drawImage(sprites.sheet, fr.x, fr.y, fr.w, fr.h, -fr.ax, -fr.ay, fr.w, fr.h);
   else { ctx.fillStyle = '#c33'; ctx.fillRect(-15, -90, 30, 90); ctx.fillStyle = '#fff'; ctx.font = '10px sans-serif'; ctx.fillText(name, -15, -95); }
   ctx.restore();

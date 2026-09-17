@@ -18,10 +18,11 @@ export const CONFIG = {
   hitCooldownMs: 400, hitstunMs: 500,
   // opponent
   startDist: 1.5, approachSpeed: 0.6, attackDist: 0.55,
-  oppW: 0.30, oppH: 1.10, oppReach: 0.50, oppFist: 0.12, oppDmg: 10,
+  oppW: 0.30, oppH: 1.10, oppReach: 0.50, oppFist: 0.12, oppDmg: 12, armorInWindup: true,
   knockback: 0.60, hopback: 0.30,
   zoneFwd: 0.7, zoneDmgMul: 0.5, edgeMargin: 0.2, hipJumpMax: 0.5, hipJumpHoldMs: 700, // player may advance 0.35 H past the calibrated spot; Ryu stays 0.2 H inside the screen edge
-  idleMs: 400, windupMs: 500, strikeMs: 150, recoverMs: 400, hopbackMs: 300, hurtMs: 350,
+  idleMs: 300, windupMs: 400, strikeMs: 150, recoverMs: 400, hopbackMs: 300, hurtMs: 350,
+  velWindowMs: 50, maxSpeed: 12, // velocity over ~3 frames; anything faster is a landmark teleport
   // calibration
   calibHoldMs: 1500, sizeMin: 0.30, sizeMax: 0.80, roomForOpp: 1.3, lumaMin: 50, lumaMax: 210, jitterMax: 0.03, fpsMin: 15,
   maxHp: 100,
@@ -162,20 +163,24 @@ export function step(state, lms, now, cfgOverride, frame) {
   p.blocking = g.wrists.some((w) => Math.hypot(w.x - g.nose.x, w.y - g.nose.y) <= cfg.blockDist * H);
 
   // --- player strikes ---
-  const canStrike = now >= p.cooldownUntil && now >= p.hitstunUntil && o.state !== 'KO';
+  let canStrike = now >= p.cooldownUntil && now >= p.hitstunUntil && o.state !== 'KO';
   const dmgMul = p.outOfZone ? cfg.zoneDmgMul : 1;
-  const prev = p.prev;
+  // reference snapshot ~velWindowMs ago (falls back to the oldest we have)
+  p.hist = p.hist || [];
+  const ref = p.hist.find((h) => now - h.t >= cfg.velWindowMs) || p.hist[p.hist.length - 1] || null;
+  const prev = ref;
+  const speed = (x, px) => { if (!ref) return 0; const v = (f * (x - px)) / H / ((now - ref.t) / 1000); return v > cfg.maxSpeed ? 0 : v; };
   p.debug = { ext: {}, vx: {} };
   for (const w of g.wrists) {
     const ext = (f * (w.x - g.shoulderMid.x)) / H;
     const pw = prev && prev.wrists[w.id];
-    const vx = pw ? (f * (w.x - pw.x)) / H / (dt / 1000) : 0;
+    const vx = pw ? speed(w.x, pw.x) : 0;
     p.debug.ext[w.id] = ext; p.debug.vx[w.id] = vx;
     if (ext < cfg.punchRearm) { p.armed[w.id] = true; p.swung[w.id] = false; }
     if (p.armed[w.id] && ext > cfg.punchExt && vx > cfg.punchSpeed) {
       const overlap = circleRect(w, boxes.hurt);
       if (canStrike && overlap) {
-        p.armed[w.id] = false;
+        p.armed[w.id] = false; canStrike = false; // one hit per frame: both fists in the box is still one punch
         hitOpponent(state, Math.round(cfg.punchDmg * dmgMul), now, w, events, cfg);
       } else if (!p.swung[w.id]) { // log the first failed swing of this punch and why
         p.swung[w.id] = true;
@@ -188,14 +193,14 @@ export function step(state, lms, now, cfgOverride, frame) {
   if (a) {
     const lift = (g.floorY - a.y) / H;
     const pa = prev && prev.ankle;
-    const vx = pa ? (f * (a.x - pa.x)) / H / (dt / 1000) : 0;
+    const vx = pa ? speed(a.x, pa.x) : 0;
     p.debug.lift = lift; p.debug.avx = vx;
     if (lift < cfg.kickRearm) { p.kickArmed = true; p.kickSwung = false; }
     const foot = { x: a.x, y: a.y, r: cfg.footR * H };
     if (p.kickArmed && lift > cfg.kickLift && vx > cfg.kickSpeed) {
       const overlap = circleRect(foot, boxes.hurt);
       if (canStrike && overlap) {
-        p.kickArmed = false;
+        p.kickArmed = false; canStrike = false;
         hitOpponent(state, Math.round(cfg.kickDmg * dmgMul), now, foot, events, cfg);
       } else if (!p.kickSwung) {
         p.kickSwung = true;
@@ -205,6 +210,7 @@ export function step(state, lms, now, cfgOverride, frame) {
     }
   }
   p.prev = snapshot(g);
+  p.hist.unshift({ t: now, ...p.prev }); if (p.hist.length > 8) p.hist.pop();
 
   // --- opponent state machine ---
   if (o.state !== 'KO') {
@@ -251,9 +257,11 @@ function hitOpponent(state, dmg, now, at, events, cfg) {
   const p = state.player, o = state.opp;
   o.hp = Math.max(0, o.hp - dmg);
   p.cooldownUntil = now + cfg.hitCooldownMs;
-  events.push({ type: 'oppHit', dmg, x: at.x, y: at.y, dir: p.facing });
+  const armored = cfg.armorInWindup && (o.state === 'WINDUP' || o.state === 'STRIKE');
+  events.push({ type: 'oppHit', dmg, x: at.x, y: at.y, dir: p.facing, armored });
   if (o.hp === 0) { setOpp(o, 'KO'); state.phase = 'ko'; state.winner = 'YOU'; events.push({ type: 'ko', winner: 'YOU' }); }
-  else setOpp(o, 'HURT');
+  else if (!armored) setOpp(o, 'HURT'); // armored: Ryu takes the damage and keeps swinging (a trade)
+  else o.armorFlashUntil = now + 200;
 }
 
 function setOpp(o, s) { o.state = s; o.stateT = 0; }

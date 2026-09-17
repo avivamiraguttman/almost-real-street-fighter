@@ -64,11 +64,11 @@ test('block during opponent strike gives zero damage and a block event', () => {
   assert.equal(s.player.hp, 100);
 });
 
-test('unblocked opponent strike does 10 damage', () => {
+test('unblocked opponent strike does oppDmg damage', () => {
   const { s, t } = ready('STRIKE');
   const { events } = run(s, rep(figure(), 3), t);
   assert.equal(count(events, 'playerHit'), 1);
-  assert.equal(s.player.hp, 90);
+  assert.equal(s.player.hp, 100 - CONFIG.oppDmg);
 });
 
 test('two punches inside the cooldown register one hit', () => {
@@ -232,4 +232,30 @@ test('thumbs up held for 800 ms in READY fires thumbsUp; a normal stance does no
   assert.equal(count(events, 'thumbsUp'), 1);
   const { events: ev2 } = run(s, rep(figure(), 60), t + 1000);
   assert.equal(count(ev2, 'thumbsUp'), 0);
+});
+
+test('both fists inside Ryu in the same frame count as one hit', () => {
+  const { s, t } = ready();
+  const both = punchFrames().map((f) => { const g = f.map((p) => ({ ...p })); g[LM.R_WRIST] = { ...g[LM.L_WRIST] }; return g; });
+  const { events } = run(s, both, t);
+  assert.equal(count(events, 'oppHit'), 1);
+  assert.equal(s.opp.hp, 90);
+});
+
+test('a hit during WINDUP damages Ryu but does not cancel his punch', () => {
+  const { s, t } = ready('WINDUP');
+  const { events, t: t1 } = run(s, punchFrames(), t);
+  assert.equal(count(events, 'oppHit'), 1);
+  assert.equal(events.find((e) => e.type === 'oppHit').armored, true);
+  assert.equal(s.opp.hp, 90);
+  assert.notEqual(s.opp.state, 'HURT');
+  let t2 = t1; for (let i = 0; i < 40 && s.opp.state !== 'STRIKE'; i++) { t2 += 16; step(s, figure(), t2, undefined, FRAME); }
+  assert.equal(s.opp.state, 'STRIKE');
+});
+
+test('a single-frame ankle teleport does not register as a kick', () => {
+  const { s, t } = ready();
+  const frames = [figure(), figure(), figure({ lift: 0.4, footFwd: 0.6 }), figure(), figure()]; // ankle jumps 0.55 H in one frame then returns
+  const { events } = run(s, frames, t);
+  assert.equal(count(events, 'oppHit'), 0);
 });

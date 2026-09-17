@@ -24,7 +24,7 @@ def analyze(path):
     if swings:
         print("  missed swings by reason:", dict(Counter(e["reason"] for e in swings)))
         rng = [e for e in swings if e["reason"] == "range"]
-        if rng: print(f"  range misses: gap median {st.median(e['gap'] for e in rng):.2f}H (attackDist {cfg['attackDist']}), ext median {st.median(e['ext'] for e in rng):.2f}")
+        if rng: print(f"  range misses: gap median {st.median(e['gap'] for e in rng):.2f}H (attackDist {cfg['attackDist']}), ext median {st.median(e.get('ext', e.get('lift', 0)) for e in rng):.2f}")
     # cadence of landed hits: spam indicator
     if len(hits) > 1:
         gaps = [(b["t"] - a["t"]) / 1000 for a, b in zip(hits, hits[1:])]
