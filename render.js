@@ -54,6 +54,10 @@ export function drawHUD(ctx, W, state, cfg) {
   const centerMsg = state.phase === 'calibrate' ? 'CALIBRATION' : state.noBody ? 'STEP INTO FRAME' : state.phase === 'ready' ? 'READY' : state.phase === 'ko' ? '' : 'FIGHT';
   if (centerMsg) { ctx.strokeText(centerMsg, W / 2, y + 18); ctx.fillText(centerMsg, W / 2, y + 18); }
   if (state.phase === 'ko') drawEndScreen(ctx, W, Hc, state);
+  if (p.tooFarBack && state.phase === 'fighting') {
+    ctx.font = 'bold 56px "Courier New", monospace'; ctx.lineWidth = 6; ctx.strokeStyle = '#000'; ctx.fillStyle = '#7cf';
+    ctx.strokeText('STEP FORWARD', W / 2, 160); ctx.fillText('STEP FORWARD', W / 2, 160);
+  }
   if (p.outOfZone && state.phase === 'fighting') {
     ctx.font = 'bold 56px "Courier New", monospace'; ctx.lineWidth = 6; ctx.strokeStyle = '#000'; ctx.fillStyle = '#ff5a5a';
     ctx.strokeText('STEP BACK', W / 2, 160); ctx.fillText('STEP BACK', W / 2, 160);

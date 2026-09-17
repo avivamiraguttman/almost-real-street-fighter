@@ -11,17 +11,17 @@ export const CONFIG = {
   calibMs: 2000,
   // player
   headR: 0.09, fistR: 0.06, footR: 0.07, torsoMinW: 0.25,
-  punchSpeed: 1.2, punchExt: 0.25, punchRearm: 0.15, wristVisMin: 0.5,
+  punchSpeed: 1.2, punchExt: 0.12, punchRearm: 0.10, punchActiveMs: 150, wristVisMin: 0.5,
   kickSpeed: 1.2, kickLift: 0.25, kickRearm: 0.10,
   blockDist: 0.25, blockFront: 0.02, blockHoldMs: 100,
   punchDmg: 10, kickDmg: 15,
   hitCooldownMs: 400, hitstunMs: 500,
   // opponent
-  startDist: 1.5, approachSpeed: 0.6, attackDist: 0.55,
-  oppW: 0.30, oppH: 1.10, oppReach: 0.75, oppLunge: 0.12, oppBody: 0.15, oppFist: 0.16, oppDmg: 14, oppScale: 1.15, armorInWindup: true, comboHits: 2,
+  startDist: 1.5, approachSpeed: 1.2, attackDist: 0.70, oppMinDist: 0.30, retreatWarn: 0.45,
+  oppW: 0.30, oppH: 1.10, oppReach: 0.75, oppLunge: 0.12, oppBody: 0.15, oppFist: 0.16, oppDmg: 14, oppScale: 1.0, armorInWindup: true, comboHits: 2,
   knockback: 0.50, hopback: 0.30,
   zoneFwd: 0.7, zoneDmgMul: 0.5, edgeMargin: 0.2, hipJumpMax: 0.5, hipJumpHoldMs: 700, // player may advance 0.35 H past the calibrated spot; Ryu stays 0.2 H inside the screen edge
-  idleMs: 150, windupMs: 350, strikeMs: 150, recoverMs: 250, hopbackMs: 300, hurtMs: 350, noBodyResetMs: 1000,
+  idleMs: 150, windupMs: 350, strikeMs: 150, recoverMs: 250, recoverBlockedMs: 700, hopbackMs: 300, hurtMs: 350, noBodyResetMs: 1000,
   velWindowMs: 50, maxSpeed: 12, // velocity over ~3 frames; anything faster is a landmark teleport
   // calibration
   calibHoldMs: 1500, sizeMin: 0.30, sizeMax: 0.80, roomForOpp: 1.3, lumaMin: 50, lumaMax: 210, jitterMax: 0.03, fpsMin: 15,
@@ -165,6 +165,9 @@ export function step(state, lms, now, cfgOverride, frame) {
   const wasOut = p.outOfZone;
   p.outOfZone = p.offset > cfg.zoneFwd;
   if (p.outOfZone && !wasOut) events.push({ type: 'stepBack' });
+  const wasBack = p.tooFarBack;
+  p.tooFarBack = p.offset < -cfg.retreatWarn;
+  if (p.tooFarBack && !wasBack) events.push({ type: 'stepForward' });
   const gap = o.dist - p.offset; // actual distance between the two fighters
 
   // --- block ---
@@ -188,16 +191,21 @@ export function step(state, lms, now, cfgOverride, frame) {
     const pw = prev && prev.wrists[w.id];
     const vx = pw ? speed(w.x, pw.x) : 0;
     p.debug.ext[w.id] = ext; p.debug.vx[w.id] = vx;
-    if (ext < cfg.punchRearm) { p.armed[w.id] = true; p.swung[w.id] = false; }
-    if (p.armed[w.id] && ext > cfg.punchExt && vx > cfg.punchSpeed) {
+    p.pending = p.pending || {}; p.active = p.active || {};
+    if (ext < cfg.punchRearm || vx < -0.5) { // punch over: re-arm, and log it as a miss if it never connected
+      if (p.pending[w.id]) { events.push(p.pending[w.id]); delete p.pending[w.id]; }
+      p.armed[w.id] = true;
+    }
+    if (ext > cfg.punchExt && vx > cfg.punchSpeed) p.active[w.id] = now; // punch in flight
+    const inFlight = p.active[w.id] != null && now - p.active[w.id] <= cfg.punchActiveMs && ext > cfg.punchExt && vx > 0; // still moving forward
+    if (p.armed[w.id] && inFlight) {
       const overlap = circleRect(w, boxes.hurt);
       if (canStrike && overlap) {
-        p.armed[w.id] = false; canStrike = false; // one hit per frame: both fists in the box is still one punch
+        p.armed[w.id] = false; canStrike = false; delete p.pending[w.id]; // one hit per frame: both fists in the box is still one punch
         hitOpponent(state, Math.round(cfg.punchDmg * dmgMul), now, w, events, cfg);
-      } else if (!p.swung[w.id]) { // log the first failed swing of this punch and why
-        p.swung[w.id] = true;
-        events.push({ type: 'swing', kind: 'punch', wrist: w.id, ext: +ext.toFixed(2), vx: +vx.toFixed(2), gap: +gap.toFixed(2),
-          reason: o.state === 'KO' ? 'ko' : now < p.hitstunUntil ? 'hitstun' : now < p.cooldownUntil ? 'cooldown' : !overlap ? 'range' : 'unknown' });
+      } else { // remember why this frame did not count; emitted as a 'swing' only if the punch ends without a hit
+        p.pending[w.id] = { type: 'swing', kind: 'punch', wrist: w.id, ext: +ext.toFixed(2), vx: +vx.toFixed(2), gap: +gap.toFixed(2),
+          reason: o.state === 'KO' ? 'ko' : now < p.hitstunUntil ? 'hitstun' : now < p.cooldownUntil ? 'cooldown' : !overlap ? 'range' : 'zone' };
       }
     }
   }
@@ -228,19 +236,26 @@ export function step(state, lms, now, cfgOverride, frame) {
   if (o.state !== 'KO') {
     o.stateT += dt;
     switch (o.state) {
-      case 'IDLE': if (o.stateT >= cfg.idleMs) setOpp(o, gap > cfg.attackDist ? 'APPROACH' : 'WINDUP'); break;
-      case 'APPROACH':
-        o.dist = Math.max(p.offset + cfg.attackDist, o.dist - cfg.approachSpeed * dt / 1000);
-        if (o.dist - p.offset <= cfg.attackDist + 1e-9) setOpp(o, 'WINDUP');
+      case 'IDLE':
+        if (o.stateT >= cfg.idleMs) {
+          if (gap <= cfg.attackDist) setOpp(o, 'WINDUP');
+          else if (o.dist > cfg.oppMinDist + 1e-9) setOpp(o, 'APPROACH');
+          else o.stateT = 0; // player has retreated out of the ring: Ryu waits at the line
+        }
         break;
-      case 'WINDUP': if (o.stateT >= cfg.windupMs) { setOpp(o, 'STRIKE'); o.struck = false; o.landed = false; o.dist -= cfg.oppLunge || 0; } break;
+      case 'APPROACH':
+        o.dist = Math.max(cfg.oppMinDist, p.offset + cfg.attackDist, o.dist - cfg.approachSpeed * dt / 1000);
+        if (o.dist - p.offset <= cfg.attackDist + 1e-9) setOpp(o, 'WINDUP');
+        else if (o.dist <= cfg.oppMinDist + 1e-9) setOpp(o, 'IDLE');
+        break;
+      case 'WINDUP': if (o.stateT >= cfg.windupMs) { setOpp(o, 'STRIKE'); o.struck = false; o.landed = false; o.blocked = false; o.dist -= cfg.oppLunge || 0; } break;
       case 'STRIKE':
         if (!o.struck) {
           const hitHead = circleRect(g.head, boxes.fist), hitTorso = rectRect(g.torso, boxes.fist);
           if (hitHead || hitTorso) {
             o.struck = true;
             const cx = boxes.fist.x + boxes.fist.w / 2, cy = boxes.fist.y + boxes.fist.h / 2;
-            if (p.blocking) events.push({ type: 'block', x: cx, y: cy });
+            if (p.blocking) { o.blocked = true; events.push({ type: 'block', x: cx, y: cy }); }
             else {
               o.landed = true;
               p.hp = Math.max(0, p.hp - cfg.oppDmg); p.hitstunUntil = now + cfg.hitstunMs;
@@ -252,8 +267,9 @@ export function step(state, lms, now, cfgOverride, frame) {
         if (o.stateT >= cfg.strikeMs) setOpp(o, 'RECOVER');
         break;
       case 'RECOVER':
-        if (o.stateT >= cfg.recoverMs) {
-          if (o.landed && (o.chain = (o.chain || 0) + 1) < cfg.comboHits && gap <= cfg.attackDist + 0.15) setOpp(o, 'WINDUP'); // combo: punch again
+        if (o.stateT >= (o.blocked ? cfg.recoverBlockedMs : cfg.recoverMs)) {
+          if (o.blocked) { o.blocked = false; o.chain = 0; setOpp(o, 'HOPBACK'); } // blocked: stagger, then back off, no combo
+          else if (o.landed && (o.chain = (o.chain || 0) + 1) < cfg.comboHits && gap <= cfg.attackDist + 0.15) setOpp(o, 'WINDUP'); // combo: punch again
           else { o.chain = 0; setOpp(o, o.landed ? 'HOPBACK' : 'APPROACH'); }
         }
         break;

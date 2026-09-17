@@ -313,3 +313,38 @@ test('the strike lunges forward so a small lean back does not escape', () => {
   assert.equal(s.opp.state, 'STRIKE');
   assert.ok(Math.abs(before - CONFIG.oppLunge - s.opp.dist) < 1e-9, `dist ${s.opp.dist}`);
 });
+
+test('a short fast punch at close range counts (extension gate is 0.12)', () => {
+  const { s, t } = ready();
+  s.opp.dist = 0.40; // his near edge is 0.25 H from your hips
+  const short = [0.14, 0.18, 0.22, 0.22, 0.22, 0.12, 0.05].map((e) => figure({ ext: e })); // 0.08 H in ~50 ms
+  const { events } = run(s, short, t);
+  assert.equal(count(events, 'oppHit'), 1);
+});
+
+test('a punch that reaches Ryu after the arm has slowed still lands (in-flight window)', () => {
+  const { s, t } = ready();
+  s.opp.dist = 0.75; // just at the edge of reach
+  const frames = [0.2, 0.35, 0.5, 0.58, 0.62, 0.64, 0.65, 0.65, 0.5, 0.2].map((e) => figure({ ext: e })); // fast, then decelerates into contact
+  const { events } = run(s, frames, t);
+  assert.equal(count(events, 'oppHit'), 1);
+});
+
+test('Ryu stops at the ring line when the player retreats; STEP FORWARD fires', () => {
+  const { s, t } = ready();
+  s.opp.dist = 1.0; s.player.lastHip = null;
+  const back = figure().map((p) => ({ ...p, x: p.x - 0.8 * H })); // retreat 0.8 H
+  const { events } = run(s, rep(back, 120), t); // 2 s
+  assert.equal(count(events, 'stepForward'), 1);
+  assert.ok(s.opp.dist >= CONFIG.oppMinDist - 1e-9, `dist ${s.opp.dist}`);
+  assert.equal(count(events, 'playerHit'), 0);
+  assert.equal(s.opp.state, 'IDLE');
+});
+
+test('a blocked punch staggers Ryu: long recover, no combo, then hop back', () => {
+  const { s, t } = ready('WINDUP');
+  let t1 = t; const seen = [];
+  for (let i = 0; i < 90; i++) { t1 += 16; step(s, figure({ blockHand: true }), t1, undefined, FRAME); if (seen[seen.length - 1] !== s.opp.state) seen.push(s.opp.state); }
+  assert.deepEqual(seen.slice(0, 4), ['WINDUP', 'STRIKE', 'RECOVER', 'HOPBACK'], seen.join(','));
+  assert.equal(s.player.hp, CONFIG.maxHp);
+});
