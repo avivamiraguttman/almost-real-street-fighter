@@ -1,3 +1,6 @@
 assets/candidates/
 .DS_Store
 logs/
+# 'original' audio set (Capcom + Mixkit clips) stays local; only the CC0 set in assets/audio/free/ ships
+assets/audio/*.mp3
+assets/audio/REPORT.md

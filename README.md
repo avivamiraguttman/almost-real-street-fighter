@@ -46,9 +46,16 @@ Vanilla JavaScript, canvas, MediaPipe Pose Landmarker (lite), a 60-line Node sta
 POST endpoint for logs. `combat.js` is pure and fully unit tested; `render.js` is covered by a
 smoke test against a fake canvas.
 
+## Audio sets
+
+Two sound sets, toggled with **M** in game:
+
+- `free` (default, ships in this repo): CC0 / free-license music and effects in `assets/audio/free/`,
+  credits in `assets/audio/free/LICENSES.md`.
+- `original`: Ryu's theme, the SF2 announcer and hit clips (Capcom) plus Mixkit effects. **Not in the
+  repo** (gitignored). If the files exist locally the game starts on this set.
+
 ## Assets and license
 
-The Ryu sprite sheet, Ryu's theme and the announcer clip are the property of Capcom and are used
-here without permission as a non-commercial fan demo. Sound effects are from Mixkit under their free
-license. `assets/audio/music_cc.mp3` and `fight_cc.mp3` are CC0 alternatives. The code is my own;
-do not redistribute the Capcom assets commercially.
+The Ryu sprite sheet is the property of Capcom and is used here without permission as a
+non-commercial fan demo. The code is my own; do not redistribute the Capcom assets commercially.

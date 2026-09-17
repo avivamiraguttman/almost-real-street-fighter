@@ -16,10 +16,29 @@ const lumaCanvas = document.createElement('canvas'); lumaCanvas.width = 32; luma
 const lumaCtx = lumaCanvas.getContext('2d', { willReadFrequently: true });
 let fpsT = performance.now(), fpsN = 0;
 
-// --- audio: files are optional, missing ones are silently skipped ---
-const SFX = {};
-for (const n of ['punch', 'kick', 'hit', 'block', 'ko', 'fight']) { const a = new Audio(`assets/audio/${n}.mp3`); a.preload = 'auto'; a.onerror = () => { SFX[n] = null; }; SFX[n] = a; }
-const music = new Audio('assets/audio/music.mp3'); music.loop = true; music.volume = 0.35; music.onerror = () => {};
+// --- audio: two sets. 'original' = Capcom clips kept locally (gitignored); 'free' = CC0 set from
+// assets/audio/free/manifest.json. Key M toggles. Defaults to 'free' when the originals are absent.
+const AUDIO_SETS = {
+  original: { dir: 'assets/audio/', files: { punch: 'punch.mp3', kick: 'kick.mp3', hit: 'hit.mp3', block: 'block.mp3', ko: 'ko.mp3', fight: 'fight.mp3', music: 'music.mp3' } },
+  free: { dir: 'assets/audio/free/', files: null }, // filled from manifest.json
+};
+let audioSet = 'free', SFX = {}, music = new Audio(), audioLabel = '', audioLabelT = 0;
+music.loop = true; music.volume = 0.35;
+async function loadAudioSet(name) {
+  const set = AUDIO_SETS[name];
+  if (!set.files) { try { set.files = await (await fetch(set.dir + 'manifest.json', { cache: 'no-store' })).json(); } catch (e) { set.files = {}; } }
+  const wasPlaying = !music.paused; music.pause();
+  SFX = {};
+  for (const n of ['punch', 'kick', 'hit', 'block', 'ko', 'fight']) { if (!set.files[n]) continue; const a = new Audio(set.dir + set.files[n]); a.preload = 'auto'; a.onerror = () => { SFX[n] = null; }; SFX[n] = a; }
+  music = new Audio(set.files.music ? set.dir + set.files.music : ''); music.loop = true; music.volume = 0.35; music.onerror = () => {};
+  if (wasPlaying && set.files.music) music.play().catch(() => {});
+  audioSet = name; audioLabel = `audio: ${name}` + (set.files.music ? '' : ' (no music file)'); audioLabelT = performance.now();
+}
+async function initAudio() {
+  const haveOriginal = await fetch('assets/audio/music.mp3', { method: 'HEAD', cache: 'no-store' }).then((r) => r.ok).catch(() => false);
+  await loadAudioSet(haveOriginal ? 'original' : 'free');
+}
+document.addEventListener('keydown', (e) => { if (e.key === 'm' || e.key === 'M') loadAudioSet(audioSet === 'original' ? 'free' : 'original'); });
 const play = (n) => { const a = SFX[n]; if (!a) return; try { const c = a.cloneNode(); c.volume = 0.9; c.play().catch(() => {}); } catch (e) {} };
 
 // browsers block audio until the page has had a click or key press; unlock on the first one
@@ -73,6 +92,7 @@ for (const [k, min, max, st] of sliders) {
 async function init() {
   try {
     say('Loading pose model...');
+    initAudio();
     const [vision, spr] = await Promise.all([FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'), loadSprites().catch((e) => { console.warn('sprites failed', e); return null; })]);
     sprites = spr;
     landmarker = await PoseLandmarker.createFromOptions(vision, {
@@ -136,6 +156,7 @@ function loop() {
   drawHUD(ctx, W, Hc, state, CONFIG);
   if (state.phase === 'calibrate') drawCalibration(ctx, W, Hc, state, lmsPx);
   if (state.phase === 'ready') drawReady(ctx, W, Hc, state);
+  if (audioLabel) { ctx.font = '14px monospace'; ctx.textAlign = 'right'; ctx.fillStyle = now - audioLabelT < 3000 ? '#ffd400' : '#888'; ctx.fillText(audioLabel + '  (M to switch)', W - 12, Hc - 12); }
   if (lastSave && now - lastSaveT < 3000) { ctx.font = 'bold 22px monospace'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(0,0,0,.7)'; ctx.fillRect(W / 2 - 320, Hc - 70, 640, 40); ctx.fillStyle = '#9f9'; ctx.fillText(lastSave, W / 2, Hc - 42); }
   if (debug && lmsPx) drawDebug(ctx, lmsPx, state);
   requestAnimationFrame(loop);
