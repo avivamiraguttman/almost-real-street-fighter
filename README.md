@@ -10,7 +10,7 @@ a headset. ***LET'S STEP INTO THE GAME!*** You walk up to a laptop, turn side-on
 standing in the game, at your own height, next to Ryu. Your real punches land. His real punches
 land. Nobody files a police report.
 
-Built in one evening with Claude Code for a hackathon, and it won. Every round is logged frame by
+Built in one hour with Claude Code at the Anthropic hackathon for the Claude Fable 5.1 launch, on $25 of tokens, and it won. Every round is logged frame by
 frame and the fight was balanced from those logs over ten rounds, from unplayable to close and fun.
 
 ## What it is
