@@ -37,12 +37,15 @@ function record(now, events) {
     lmsPx ? lmsPx.map((q) => [Math.round(q.x), Math.round(q.y), +q.visibility.toFixed(2)]) : null]);
   for (const e of events) rec.events.push({ t: Math.round(now), ...e });
 }
-function downloadRec() {
+// Save the log by POSTing it to server.js (lands in ./logs/). No download dialog, no navigation.
+let lastSave = '';
+function saveRec() {
   if (!rec || !rec.frames.length) return;
-  const blob = new Blob([JSON.stringify(rec)], { type: 'application/json' });
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `fightlog-${rec.startedAt.replace(/[:.]/g, '-')}.json`; a.click();
+  fetch('/log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(rec) })
+    .then((r) => r.json()).then((j) => { lastSave = `log saved: logs/${j.name}`; console.log(lastSave); })
+    .catch((e) => { lastSave = 'log save failed (run node server.js)'; console.warn(e); });
 }
-document.addEventListener('keydown', (e) => { if (e.key === 'l' || e.key === 'L') downloadRec(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'l' || e.key === 'L') saveRec(); });
 
 function beginFight() {
   if (!startFight(state)) return;
@@ -109,7 +112,7 @@ function loop() {
   for (const e of events) {
     if (e.type === 'oppHit') { play(e.dmg >= CONFIG.kickDmg ? 'kick' : 'punch'); effects.push({ type: 'spark', t0: now, x: e.x, y: e.y }, { type: 'popup', t0: now, x: e.x, y: e.y - 30, text: `-${e.dmg}`, color: '#ffd400' }); }
     if (e.type === 'playerHit') { play('hit'); effects.push({ type: 'spark', t0: now, x: e.x, y: e.y }, { type: 'popup', t0: now, x: e.x, y: e.y - 30, text: `-${e.dmg}`, color: '#ff5a5a' }, { type: 'flash', t0: now }); jolt = { t0: now, dir: e.dir }; }
-    if (e.type === 'ko') { play('ko'); music.pause(); setTimeout(downloadRec, 300); }
+    if (e.type === 'ko') { play('ko'); music.pause(); setTimeout(saveRec, 300); }
     if (e.type === 'thumbsUp') beginFight();
     if (e.type === 'stepBack') play('block');
     if (e.type === 'block') { play('block'); } if (e.type === 'block') effects.push({ type: 'popup', t0: now, x: e.x, y: e.y - 30, text: 'BLOCK', color: '#7cf' });
@@ -128,6 +131,7 @@ function loop() {
   drawHUD(ctx, W, state, CONFIG);
   if (state.phase === 'calibrate') drawCalibration(ctx, W, Hc, state, lmsPx);
   if (state.phase === 'ready') drawReady(ctx, W, Hc, state);
+  if (lastSave) { ctx.font = '14px monospace'; ctx.textAlign = 'right'; ctx.fillStyle = '#9f9'; ctx.fillText(lastSave, W - 12, Hc - 12); }
   if (debug && lmsPx) drawDebug(ctx, lmsPx, state);
   requestAnimationFrame(loop);
 }

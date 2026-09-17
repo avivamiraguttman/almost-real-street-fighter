@@ -56,7 +56,7 @@ export function drawHUD(ctx, W, state, cfg) {
     ctx.font = 'bold 32px "Courier New", monospace'; ctx.lineWidth = 5; ctx.fillStyle = '#fff';
     const msg = state.winner === 'YOU' ? 'YOU WIN' : 'RYU WINS';
     ctx.strokeText(msg, W / 2, 250); ctx.fillText(msg, W / 2, 250);
-    ctx.font = '20px "Courier New", monospace'; ctx.strokeText('thumbs up or SPACE: rematch   R: ready screen   L: download log', W / 2, 290); ctx.fillText('thumbs up or SPACE: rematch   R: ready screen   L: download log', W / 2, 290);
+    ctx.font = '20px "Courier New", monospace'; ctx.strokeText('thumbs up or SPACE: rematch   R: ready screen   L: save log', W / 2, 290); ctx.fillText('thumbs up or SPACE: rematch   R: ready screen   L: save log', W / 2, 290);
     const tp = state.player.thumbProgress || 0;
     if (tp > 0) { ctx.fillStyle = '#333'; ctx.fillRect(W / 2 - 150, 310, 300, 14); ctx.fillStyle = '#3ddc5a'; ctx.fillRect(W / 2 - 150, 310, 300 * tp, 14); }
   }

@@ -1,1 +1,1 @@
-{ "name": "fightcam", "type": "module", "private": true, "scripts": { "test": "node --test test/*.test.js", "serve": "python3 -m http.server 8000" } }
+{ "name": "fightcam", "type": "module", "private": true, "scripts": { "test": "node --test test/*.test.js", "serve": "node server.js" } }
