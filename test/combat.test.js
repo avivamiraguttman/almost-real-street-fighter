@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, step, startFight, recalibrate, calibrationChecks, selectPose, detectThumbsUp, CONFIG, LM } from '../combat.js';
+import { createGame, step, startFight, recalibrate, calibrationChecks, selectPose, detectThumbsUp, detectHandUp, CONFIG, LM } from '../combat.js';
 
 const H = 400, FLOOR = 600, HIP = 300;
 // Standing side-profile figure facing +x. Overrides are in H units relative to shoulder / floor.
@@ -11,7 +11,7 @@ function figure({ ext = 0.1, wristY = -0.75, lift = 0, footFwd = 0.05, blockHand
   lms[LM.L_SHOULDER] = lms[LM.R_SHOULDER] = { x: shoulderX, y: shoulderY, visibility: 1 };
   lms[LM.L_HIP] = lms[LM.R_HIP] = { x: HIP, y: FLOOR - 0.5 * H, visibility: 1 };
   const wr = blockHand
-    ? { x: HIP + 0.1 * H, y: FLOOR - H + 0.05 * H, visibility: 1 }
+    ? { x: HIP + 0.18 * H, y: FLOOR - H + 0.05 * H, visibility: 1 } // 0.08 H in front of the nose, at face height
     : { x: shoulderX + ext * H, y: FLOOR + wristY * H, visibility: 1 };
   lms[LM.L_WRIST] = wr; lms[LM.R_WRIST] = { x: shoulderX + 0.1 * H, y: FLOOR - 0.75 * H, visibility: 0.3 };
   lms[LM.L_ANKLE] = { x: HIP - 0.05 * H, y: FLOOR, visibility: 1 };
@@ -56,9 +56,9 @@ test('slow extension registers zero hits', () => {
   assert.equal(s.opp.hp, 100);
 });
 
-test('block during opponent strike gives zero damage and a block event', () => {
-  const { s, t } = ready('STRIKE');
-  const { events } = run(s, rep(figure({ blockHand: true }), 3), t);
+test('block held through the wind-up gives zero damage and a block event', () => {
+  const { s, t } = ready('WINDUP');
+  const { events } = run(s, rep(figure({ blockHand: true }), 25), t); // guard up 400 ms, strike arrives at 300 ms
   assert.equal(count(events, 'block'), 1);
   assert.equal(count(events, 'playerHit'), 0);
   assert.equal(s.player.hp, 100);
@@ -85,10 +85,13 @@ test('punching during hitstun registers zero hits', () => {
   assert.equal(count(r2.events, 'oppHit'), 0);
 });
 
-test('opponent hops back after a landed strike, idles after a miss', () => {
+test('opponent hops back after its combo lands, re-approaches after a miss', () => {
   const { s, t } = ready('STRIKE');
-  run(s, rep(figure(), 40), t); // strike 150 + recover 400 -> HOPBACK
+  let t1 = t; const seen = new Set();
+  for (let i = 0; i < 80 && s.opp.state !== 'HOPBACK'; i++) { t1 += 16; step(s, figure(), t1, undefined, FRAME); seen.add(s.opp.state); }
   assert.equal(s.opp.state, 'HOPBACK');
+  assert.ok(seen.has('WINDUP'), 'combo wind-up expected before hopback');
+  run(s, rep(figure(), 25), t1);
   assert.ok(s.opp.dist > CONFIG.attackDist);
 
   const { s: s2, t: t2 } = ready('STRIKE');
@@ -258,4 +261,40 @@ test('a single-frame ankle teleport does not register as a kick', () => {
   const frames = [figure(), figure(), figure({ lift: 0.4, footFwd: 0.6 }), figure(), figure()]; // ankle jumps 0.55 H in one frame then returns
   const { events } = run(s, frames, t);
   assert.equal(count(events, 'oppHit'), 0);
+});
+
+test('a guard hand beside the cheek or a fist raised for one frame is not a block', () => {
+  const { s, t } = ready('WINDUP');
+  const cheek = figure(); cheek[LM.L_WRIST] = { x: HIP + 0.08 * H, y: FLOOR - H + 0.05 * H, visibility: 1 }; // near the nose but behind it
+  const { events } = run(s, rep(cheek, 25), t);
+  assert.equal(count(events, 'block'), 0); assert.equal(count(events, 'playerHit'), 1);
+  const { s: s2, t: t2 } = ready('STRIKE');
+  const { events: ev2 } = run(s2, rep(figure({ blockHand: true }), 3), t2); // guard appears only as the strike lands
+  assert.equal(count(ev2, 'block'), 0); assert.equal(count(ev2, 'playerHit'), 1);
+});
+
+test('after landing a punch Ryu chains a second one before hopping back', () => {
+  const { s, t } = ready('STRIKE');
+  let t1 = t; const seen = [];
+  for (let i = 0; i < 80; i++) { t1 += 16; step(s, figure(), t1, undefined, FRAME); if (seen[seen.length - 1] !== s.opp.state) seen.push(s.opp.state); }
+  assert.deepEqual(seen.slice(0, 5), ['STRIKE', 'RECOVER', 'WINDUP', 'STRIKE', 'RECOVER']);
+  assert.ok(seen.includes('HOPBACK'), seen.join(','));
+  assert.equal(s.player.hp, 100 - 2 * CONFIG.oppDmg);
+});
+
+test('body lost for a second: Ryu stands down and a paused event fires', () => {
+  const { s, t } = ready('HURT');
+  const { events } = run(s, rep(null, 70), t);
+  assert.equal(count(events, 'paused'), 1);
+  assert.equal(s.opp.state, 'IDLE');
+});
+
+test('hand raised above the head is an alternative start gesture', () => {
+  const s = createGame(CONFIG);
+  const { t } = run(s, rep(figure(), 130), 0);
+  const up = figure(); up[LM.L_WRIST] = { x: 300, y: 600 - H - 0.2 * H, visibility: 1 };
+  assert.equal(detectHandUp(up, s.player.geom, CONFIG), true);
+  assert.equal(detectHandUp(figure(), s.player.geom, CONFIG), false);
+  const { events } = run(s, rep(up, 40), t);
+  assert.equal(count(events, 'thumbsUp'), 1);
 });

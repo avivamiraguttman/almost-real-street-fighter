@@ -13,20 +13,20 @@ export const CONFIG = {
   headR: 0.09, fistR: 0.06, footR: 0.07, torsoMinW: 0.25,
   punchSpeed: 1.2, punchExt: 0.35, punchRearm: 0.25,
   kickSpeed: 1.2, kickLift: 0.25, kickRearm: 0.10,
-  blockDist: 0.20,
+  blockDist: 0.22, blockFront: 0.02, blockHoldMs: 150,
   punchDmg: 10, kickDmg: 15,
   hitCooldownMs: 400, hitstunMs: 500,
   // opponent
   startDist: 1.5, approachSpeed: 0.6, attackDist: 0.55,
-  oppW: 0.30, oppH: 1.10, oppReach: 0.50, oppFist: 0.12, oppDmg: 12, armorInWindup: true,
+  oppW: 0.30, oppH: 1.10, oppReach: 0.50, oppFist: 0.12, oppDmg: 15, armorInWindup: true, comboHits: 2,
   knockback: 0.60, hopback: 0.30,
   zoneFwd: 0.7, zoneDmgMul: 0.5, edgeMargin: 0.2, hipJumpMax: 0.5, hipJumpHoldMs: 700, // player may advance 0.35 H past the calibrated spot; Ryu stays 0.2 H inside the screen edge
-  idleMs: 300, windupMs: 400, strikeMs: 150, recoverMs: 400, hopbackMs: 300, hurtMs: 350,
+  idleMs: 150, windupMs: 300, strikeMs: 150, recoverMs: 250, hopbackMs: 300, hurtMs: 350, noBodyResetMs: 1000,
   velWindowMs: 50, maxSpeed: 12, // velocity over ~3 frames; anything faster is a landmark teleport
   // calibration
   calibHoldMs: 1500, sizeMin: 0.30, sizeMax: 0.80, roomForOpp: 1.3, lumaMin: 50, lumaMax: 210, jitterMax: 0.03, fpsMin: 15,
   maxHp: 100,
-  thumbHoldMs: 800, thumbUp: 0.06, fistTight: 0.12,
+  thumbHoldMs: 500, thumbUp: 0.03, fistTight: 0.22, handUpAbove: 0.10,
 };
 
 export function createGame(cfg = CONFIG) {
@@ -126,7 +126,14 @@ export function step(state, lms, now, cfgOverride, frame) {
   }
   if (g) p.lastHip = { x: g.hipMid.x, y: g.hipMid.y, t: now };
   state.noBody = !g;
-  if (!g) { p.prev = null; if (state.phase === 'calibrate') { state.calib.okSince = null; state.calib.checks = [{ name: 'body', ok: false, msg: 'Step into frame: whole body visible' }]; } return events; }
+  if (!g) {
+    p.prev = null; p.hist = [];
+    if (state.phase === 'calibrate') { state.calib.okSince = null; state.calib.checks = [{ name: 'body', ok: false, msg: 'Step into frame: whole body visible' }]; }
+    if (state.noBodySince == null) state.noBodySince = now;
+    if (state.phase === 'fighting' && now - state.noBodySince >= cfg.noBodyResetMs && o.state !== 'KO' && o.state !== 'IDLE') { setOpp(o, 'IDLE'); events.push({ type: 'paused' }); }
+    return events;
+  }
+  state.noBodySince = null;
   p.H = g.H; p.floorY = g.floorY; p.geom = g;
 
   if (state.phase === 'calibrate') {
@@ -139,7 +146,7 @@ export function step(state, lms, now, cfgOverride, frame) {
     state.boxes = opponentBoxes(g, o, p.facing, cfg, state.lock && state.lock.homeX);
     // thumbs-up held for thumbHoldMs starts the round (alternative to SPACE)
     if (state.phase === 'ready' || state.phase === 'ko') {
-      if (detectThumbsUp(lms, g, cfg)) { if (p.thumbSince == null) p.thumbSince = now; p.thumbProgress = Math.min(1, (now - p.thumbSince) / cfg.thumbHoldMs); if (now - p.thumbSince >= cfg.thumbHoldMs) { p.thumbSince = null; p.thumbProgress = 0; events.push({ type: 'thumbsUp' }); } }
+      if (detectThumbsUp(lms, g, cfg) || detectHandUp(lms, g, cfg)) { if (p.thumbSince == null) p.thumbSince = now; p.thumbProgress = Math.min(1, (now - p.thumbSince) / cfg.thumbHoldMs); if (now - p.thumbSince >= cfg.thumbHoldMs) { p.thumbSince = null; p.thumbProgress = 0; events.push({ type: 'thumbsUp' }); } }
       else { p.thumbSince = null; p.thumbProgress = 0; }
     }
     p.prev = snapshot(g); return events;
@@ -160,7 +167,11 @@ export function step(state, lms, now, cfgOverride, frame) {
   const gap = o.dist - p.offset; // actual distance between the two fighters
 
   // --- block ---
-  p.blocking = g.wrists.some((w) => Math.hypot(w.x - g.nose.x, w.y - g.nose.y) <= cfg.blockDist * H);
+  const guardPose = g.wrists.some((w) => Math.hypot(w.x - g.nose.x, w.y - g.nose.y) <= cfg.blockDist * H
+    && f * (w.x - g.nose.x) > cfg.blockFront * H      // fist between your face and Ryu, not beside your cheek
+    && w.y < g.nose.y + 0.12 * H);                     // at face height, not at the chin/chest
+  if (guardPose) { if (p.guardSince == null) p.guardSince = now; } else p.guardSince = null;
+  p.blocking = p.guardSince != null && now - p.guardSince >= cfg.blockHoldMs;
 
   // --- player strikes ---
   let canStrike = now >= p.cooldownUntil && now >= p.hitstunUntil && o.state !== 'KO';
@@ -239,7 +250,12 @@ export function step(state, lms, now, cfgOverride, frame) {
         }
         if (o.stateT >= cfg.strikeMs) setOpp(o, 'RECOVER');
         break;
-      case 'RECOVER': if (o.stateT >= cfg.recoverMs) setOpp(o, o.landed ? 'HOPBACK' : 'IDLE'); break;
+      case 'RECOVER':
+        if (o.stateT >= cfg.recoverMs) {
+          if (o.landed && (o.chain = (o.chain || 0) + 1) < cfg.comboHits && gap <= cfg.attackDist + 0.15) setOpp(o, 'WINDUP'); // combo: punch again
+          else { o.chain = 0; setOpp(o, o.landed ? 'HOPBACK' : 'APPROACH'); }
+        }
+        break;
       case 'HOPBACK':
         o.dist = Math.min(maxDist, o.dist + cfg.hopback * dt / cfg.hopbackMs);
         if (o.stateT >= cfg.hopbackMs) setOpp(o, 'IDLE');
@@ -342,11 +358,16 @@ export function detectThumbsUp(lms, g, cfg) {
   const H = g.H;
   for (const [wr, th, ix] of [[LM.L_WRIST, 21, 19], [LM.R_WRIST, 22, 20]]) {
     const w = lms[wr], t = lms[th], i = lms[ix];
-    if (!vis(w, cfg) || !t || !i || t.visibility < 0.4) continue;
+    if (!vis(w, cfg) || !t || !i || t.visibility < 0.3) continue;
     const thumbUp = (w.y - t.y) / H > cfg.thumbUp;
     const fist = Math.hypot(i.x - w.x, i.y - w.y) / H < cfg.fistTight;
-    const raised = w.y < g.shoulderMid.y + 0.15 * H;
+    const raised = w.y < g.hipMid.y; // anywhere above the hips
     if (thumbUp && fist && raised) return true;
   }
   return false;
+}
+
+// Hand raised clearly above the head: the fallback start gesture.
+export function detectHandUp(lms, g, cfg) {
+  return [LM.L_WRIST, LM.R_WRIST].some((i) => vis(lms[i], cfg) && (g.nose.y - lms[i].y) / g.H > cfg.handUpAbove);
 }

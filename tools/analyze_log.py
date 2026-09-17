@@ -15,6 +15,8 @@ def analyze(path):
     t0, t1 = F[0][0], F[-1][0]
     dur = (t1 - t0) / 1000
     print(f"== {path}\nround: {dur:.1f}s, {len(F)} frames ({len(F)/dur:.0f} fps), lock H={d['lock'].get('H'):.0f}px facing={d['lock'].get('facing')}")
+    active = sum(1 for r in F if not r[9]) / max(1, len(F) / dur)
+    print(f"active (body tracked) time: {active:.1f}s of {dur:.1f}s")
     ev = Counter(e["type"] for e in E)
     print(f"events: {dict(ev)}")
     hits = [e for e in E if e["type"] == "oppHit"]; taken = [e for e in E if e["type"] == "playerHit"]

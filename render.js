@@ -143,7 +143,7 @@ export function drawCalibration(ctx, W, Hc, state, lmsPx) {
 export function drawReady(ctx, W, Hc, state) {
   ctx.save(); ctx.textAlign = 'center'; ctx.lineWidth = 6; ctx.strokeStyle = '#000';
   ctx.font = 'bold 40px "Courier New", monospace'; ctx.fillStyle = '#fff';
-  ctx.strokeText('THUMBS UP or SPACE to FIGHT', W / 2, Hc / 2); ctx.fillText('THUMBS UP or SPACE to FIGHT', W / 2, Hc / 2);
+  ctx.strokeText('THUMBS UP, HAND UP, or SPACE to FIGHT', W / 2, Hc / 2); ctx.fillText('THUMBS UP, HAND UP, or SPACE to FIGHT', W / 2, Hc / 2);
   const tp = state.player.thumbProgress || 0;
   if (tp > 0) { ctx.fillStyle = '#333'; ctx.fillRect(W / 2 - 150, Hc / 2 + 60, 300, 14); ctx.fillStyle = '#3ddc5a'; ctx.fillRect(W / 2 - 150, Hc / 2 + 60, 300 * tp, 14); }
   ctx.font = '20px "Courier New", monospace'; ctx.fillStyle = '#ccc'; ctx.lineWidth = 4;
