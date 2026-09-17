@@ -2,15 +2,13 @@
 
 ### Fighting games are fun. Real fights are more fun. Real fights also hurt. We found the gap in the market.
 
-Playing Street Fighter on a computer is cool. Being *in* a street fight is, objectively, cooler.
-It is also a great way to lose teeth. So here is the next best thing.
+Playing street fighting games is COOL. Being in a street fight is, objectively, COOLER. It is
+also a great way to lose teeth. So here is the next best thing.
 
 Every fighting game ever made puts a wall between you and the fight: a controller, a keyboard,
-a headset. We removed the wall. You walk up to a laptop, turn side-on, and you are standing in
-the game, at your own height, next to Ryu. Your real punches land. His real punches land. Nobody
-files a police report.
-
-**"Let me just step into the game."** That was the whole pitch. Then we stepped into the game.
+a headset. ***LET'S STEP INTO THE GAME!*** You walk up to a laptop, turn side-on, and you are
+standing in the game, at your own height, next to Ryu. Your real punches land. His real punches
+land. Nobody files a police report.
 
 Built in one evening with Claude Code for a hackathon, and it won. Every round is logged frame by
 frame and the fight was balanced from those logs over ten rounds, from unplayable to close and fun.
