@@ -44,7 +44,7 @@ test('fast punch into opponent registers exactly one hit', () => {
   const { s, t } = ready();
   const { events } = run(s, punchFrames(), t);
   assert.equal(count(events, 'oppHit'), 1);
-  assert.equal(s.opp.hp, 90);
+  assert.equal(s.opp.hp, CONFIG.maxHp - 10);
   assert.equal(s.opp.state === 'HURT' || s.opp.state === 'IDLE', true);
 });
 
@@ -53,7 +53,7 @@ test('slow extension registers zero hits', () => {
   const frames = Array.from({ length: 60 }, (_, i) => figure({ ext: 0.1 + (0.5 * i) / 60 })); // ~0.5 H/s
   const { events } = run(s, frames, t);
   assert.equal(count(events, 'oppHit'), 0);
-  assert.equal(s.opp.hp, 100);
+  assert.equal(s.opp.hp, CONFIG.maxHp);
 });
 
 test('block held through the wind-up gives zero damage and a block event', () => {
@@ -61,14 +61,14 @@ test('block held through the wind-up gives zero damage and a block event', () =>
   const { events } = run(s, rep(figure({ blockHand: true }), 25), t); // guard up 400 ms, strike arrives at 300 ms
   assert.equal(count(events, 'block'), 1);
   assert.equal(count(events, 'playerHit'), 0);
-  assert.equal(s.player.hp, 100);
+  assert.equal(s.player.hp, CONFIG.maxHp);
 });
 
 test('unblocked opponent strike does oppDmg damage', () => {
   const { s, t } = ready('STRIKE');
   const { events } = run(s, rep(figure(), 3), t);
   assert.equal(count(events, 'playerHit'), 1);
-  assert.equal(s.player.hp, 100 - CONFIG.oppDmg);
+  assert.equal(s.player.hp, CONFIG.maxHp - CONFIG.oppDmg);
 });
 
 test('two punches inside the cooldown register one hit', () => {
@@ -97,7 +97,7 @@ test('opponent hops back after its combo lands, re-approaches after a miss', () 
   const { s: s2, t: t2 } = ready('STRIKE');
   s2.opp.dist = 1.5; // out of reach
   run(s2, rep(figure(), 40), t2);
-  assert.equal(s2.player.hp, 100);
+  assert.equal(s2.player.hp, CONFIG.maxHp);
   assert.notEqual(s2.opp.state, 'HOPBACK');
 });
 
@@ -175,7 +175,7 @@ test('advancing past the home zone warns and halves damage but never blocks hits
   assert.equal(count(events, 'stepBack'), 1);
   assert.equal(s.player.outOfZone, true);
   assert.equal(count(events, 'oppHit'), 1);
-  assert.equal(s.opp.hp, 95); // half of 10
+  assert.equal(s.opp.hp, CONFIG.maxHp - 5); // half of 10
 });
 
 test('a missed swing is logged with reason range; a swing during cooldown says cooldown', () => {
@@ -242,7 +242,7 @@ test('both fists inside Ryu in the same frame count as one hit', () => {
   const both = punchFrames().map((f) => { const g = f.map((p) => ({ ...p })); g[LM.R_WRIST] = { ...g[LM.L_WRIST] }; return g; });
   const { events } = run(s, both, t);
   assert.equal(count(events, 'oppHit'), 1);
-  assert.equal(s.opp.hp, 90);
+  assert.equal(s.opp.hp, CONFIG.maxHp - 10);
 });
 
 test('a hit during WINDUP damages Ryu but does not cancel his punch', () => {
@@ -250,7 +250,7 @@ test('a hit during WINDUP damages Ryu but does not cancel his punch', () => {
   const { events, t: t1 } = run(s, punchFrames(), t);
   assert.equal(count(events, 'oppHit'), 1);
   assert.equal(events.find((e) => e.type === 'oppHit').armored, true);
-  assert.equal(s.opp.hp, 90);
+  assert.equal(s.opp.hp, CONFIG.maxHp - 10);
   assert.notEqual(s.opp.state, 'HURT');
   let t2 = t1; for (let i = 0; i < 40 && s.opp.state !== 'STRIKE'; i++) { t2 += 16; step(s, figure(), t2, undefined, FRAME); }
   assert.equal(s.opp.state, 'STRIKE');
@@ -279,7 +279,7 @@ test('after landing a punch Ryu chains a second one before hopping back', () => 
   for (let i = 0; i < 80; i++) { t1 += 16; step(s, figure(), t1, undefined, FRAME); if (seen[seen.length - 1] !== s.opp.state) seen.push(s.opp.state); }
   assert.deepEqual(seen.slice(0, 5), ['STRIKE', 'RECOVER', 'WINDUP', 'STRIKE', 'RECOVER']);
   assert.ok(seen.includes('HOPBACK'), seen.join(','));
-  assert.equal(s.player.hp, 100 - 2 * CONFIG.oppDmg);
+  assert.equal(s.player.hp, CONFIG.maxHp - 2 * CONFIG.oppDmg);
 });
 
 test('body lost for a second: Ryu stands down and a paused event fires', () => {

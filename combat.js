@@ -13,7 +13,7 @@ export const CONFIG = {
   headR: 0.09, fistR: 0.06, footR: 0.07, torsoMinW: 0.25,
   punchSpeed: 1.2, punchExt: 0.35, punchRearm: 0.25,
   kickSpeed: 1.2, kickLift: 0.25, kickRearm: 0.10,
-  blockDist: 0.22, blockFront: 0.02, blockHoldMs: 150,
+  blockDist: 0.25, blockFront: 0.02, blockHoldMs: 100,
   punchDmg: 10, kickDmg: 15,
   hitCooldownMs: 400, hitstunMs: 500,
   // opponent
@@ -21,11 +21,11 @@ export const CONFIG = {
   oppW: 0.30, oppH: 1.10, oppReach: 0.50, oppFist: 0.12, oppDmg: 15, armorInWindup: true, comboHits: 2,
   knockback: 0.60, hopback: 0.30,
   zoneFwd: 0.7, zoneDmgMul: 0.5, edgeMargin: 0.2, hipJumpMax: 0.5, hipJumpHoldMs: 700, // player may advance 0.35 H past the calibrated spot; Ryu stays 0.2 H inside the screen edge
-  idleMs: 150, windupMs: 300, strikeMs: 150, recoverMs: 250, hopbackMs: 300, hurtMs: 350, noBodyResetMs: 1000,
+  idleMs: 150, windupMs: 350, strikeMs: 150, recoverMs: 250, hopbackMs: 300, hurtMs: 350, noBodyResetMs: 1000,
   velWindowMs: 50, maxSpeed: 12, // velocity over ~3 frames; anything faster is a landmark teleport
   // calibration
   calibHoldMs: 1500, sizeMin: 0.30, sizeMax: 0.80, roomForOpp: 1.3, lumaMin: 50, lumaMax: 210, jitterMax: 0.03, fpsMin: 15,
-  maxHp: 100,
+  maxHp: 150,
   thumbHoldMs: 500, thumbUp: 0.03, fistTight: 0.22, handUpAbove: 0.10,
 };
 
