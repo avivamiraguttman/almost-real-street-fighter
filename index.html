@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>FightCam</title>
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:"Courier New",monospace}
+  #cam{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+  #game{position:absolute;inset:0;width:100vw;height:100vh;object-fit:contain;image-rendering:pixelated}
+  #status{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:#ffd400;font-size:28px;font-weight:bold;text-shadow:2px 2px 0 #000;text-align:center;padding:0 20px}
+  #panel{display:none;position:absolute;right:12px;bottom:12px;background:rgba(0,0,0,.7);color:#0f0;padding:10px;font-size:13px;border:1px solid #0f0}
+  #panel label{display:grid;grid-template-columns:110px 160px 50px;gap:6px;align-items:center;margin:2px 0}
+  #help{position:absolute;left:12px;bottom:10px;color:#aaa;font-size:13px}
+</style></head>
+<body>
+<video id="cam" autoplay playsinline muted></video>
+<canvas id="game" width="1280" height="720"></canvas>
+<div id="status">Loading...</div>
+<div id="panel"></div>
+<div id="help">R restart &nbsp; D debug + sliders &nbsp;|&nbsp; punch: fast arm toward Ryu &nbsp; kick: raise near leg and swing &nbsp; block: fist by your face</div>
+<script type="module" src="main.js"></script>
+</body></html>
