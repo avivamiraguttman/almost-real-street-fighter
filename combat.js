@@ -244,7 +244,7 @@ export function step(state, lms, now, cfgOverride, frame) {
               o.landed = true;
               p.hp = Math.max(0, p.hp - cfg.oppDmg); p.hitstunUntil = now + cfg.hitstunMs;
               events.push({ type: 'playerHit', dmg: cfg.oppDmg, x: cx, y: cy, dir: -f });
-              if (p.hp === 0) { state.phase = 'ko'; state.winner = 'RYU'; events.push({ type: 'ko', winner: 'RYU' }); }
+              if (p.hp === 0) { state.phase = 'ko'; state.winner = 'RYU'; state.koAt = now; state.perfect = o.hp === cfg.maxHp; events.push({ type: 'ko', winner: 'RYU' }); }
             }
           }
         }
@@ -275,7 +275,7 @@ function hitOpponent(state, dmg, now, at, events, cfg) {
   p.cooldownUntil = now + cfg.hitCooldownMs;
   const armored = cfg.armorInWindup && (o.state === 'WINDUP' || o.state === 'STRIKE');
   events.push({ type: 'oppHit', dmg, x: at.x, y: at.y, dir: p.facing, armored });
-  if (o.hp === 0) { setOpp(o, 'KO'); state.phase = 'ko'; state.winner = 'YOU'; events.push({ type: 'ko', winner: 'YOU' }); }
+  if (o.hp === 0) { setOpp(o, 'KO'); state.phase = 'ko'; state.winner = 'YOU'; state.koAt = now; state.perfect = p.hp === cfg.maxHp; events.push({ type: 'ko', winner: 'YOU' }); }
   else if (!armored) setOpp(o, 'HURT'); // armored: Ryu takes the damage and keeps swinging (a trade)
   else o.armorFlashUntil = now + 200;
 }

@@ -124,9 +124,11 @@ function loop() {
   const ja = Math.max(0, 1 - (now - jolt.t0) / 300);
   const jx = jolt.dir * 30 * ja * ja;
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, Hc);
+  if (state.phase === 'ko' && state.winner === 'RYU') ctx.filter = 'grayscale(0.85) brightness(0.7)';
   ctx.drawImage(video, jx, 0, W, Hc);
+  ctx.filter = 'none';
 
-  if (state.player.geom && state.boxes && state.phase !== 'calibrate') drawOpponent(ctx, sprites, state.opp, state.boxes, state.player.facing, state.player.H, now);
+  if (state.player.geom && state.boxes && state.phase !== 'calibrate') drawOpponent(ctx, sprites, state.opp, state.boxes, state.player.facing, state.player.H, now, state.winner);
   drawEffects(ctx, W, Hc, effects, now);
   drawHUD(ctx, W, state, CONFIG);
   if (state.phase === 'calibrate') drawCalibration(ctx, W, Hc, state, lmsPx);
