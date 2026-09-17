@@ -38,12 +38,12 @@ function record(now, events) {
   for (const e of events) rec.events.push({ t: Math.round(now), ...e });
 }
 // Save the log by POSTing it to server.js (lands in ./logs/). No download dialog, no navigation.
-let lastSave = '';
+let lastSave = '', lastSaveT = 0;
 function saveRec() {
   if (!rec || !rec.frames.length) return;
   fetch('/log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(rec) })
-    .then((r) => r.json()).then((j) => { lastSave = `log saved: logs/${j.name}`; console.log(lastSave); })
-    .catch((e) => { lastSave = 'log save failed (run node server.js)'; console.warn(e); });
+    .then((r) => r.json()).then((j) => { lastSave = `log saved: logs/${j.name}`; lastSaveT = performance.now(); console.log(lastSave); })
+    .catch((e) => { lastSave = 'log save failed (run node server.js)'; lastSaveT = performance.now(); console.warn(e); });
 }
 document.addEventListener('keydown', (e) => { if (e.key === 'l' || e.key === 'L') saveRec(); });
 
@@ -131,7 +131,7 @@ function loop() {
   drawHUD(ctx, W, state, CONFIG);
   if (state.phase === 'calibrate') drawCalibration(ctx, W, Hc, state, lmsPx);
   if (state.phase === 'ready') drawReady(ctx, W, Hc, state);
-  if (lastSave) { ctx.font = '14px monospace'; ctx.textAlign = 'right'; ctx.fillStyle = '#9f9'; ctx.fillText(lastSave, W - 12, Hc - 12); }
+  if (lastSave && now - lastSaveT < 3000) { ctx.font = 'bold 22px monospace'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(0,0,0,.7)'; ctx.fillRect(W / 2 - 320, Hc - 70, 640, 40); ctx.fillStyle = '#9f9'; ctx.fillText(lastSave, W / 2, Hc - 42); }
   if (debug && lmsPx) drawDebug(ctx, lmsPx, state);
   requestAnimationFrame(loop);
 }

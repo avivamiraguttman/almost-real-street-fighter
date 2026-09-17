@@ -18,8 +18,8 @@ export const CONFIG = {
   hitCooldownMs: 400, hitstunMs: 500,
   // opponent
   startDist: 1.5, approachSpeed: 0.6, attackDist: 0.55,
-  oppW: 0.30, oppH: 1.10, oppReach: 0.50, oppFist: 0.12, oppDmg: 15, armorInWindup: true, comboHits: 2,
-  knockback: 0.60, hopback: 0.30,
+  oppW: 0.30, oppH: 1.10, oppReach: 0.60, oppFist: 0.16, oppDmg: 18, armorInWindup: true, comboHits: 2,
+  knockback: 0.50, hopback: 0.30,
   zoneFwd: 0.7, zoneDmgMul: 0.5, edgeMargin: 0.2, hipJumpMax: 0.5, hipJumpHoldMs: 700, // player may advance 0.35 H past the calibrated spot; Ryu stays 0.2 H inside the screen edge
   idleMs: 150, windupMs: 350, strikeMs: 150, recoverMs: 250, hopbackMs: 300, hurtMs: 350, noBodyResetMs: 1000,
   velWindowMs: 50, maxSpeed: 12, // velocity over ~3 frames; anything faster is a landmark teleport
