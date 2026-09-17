@@ -298,3 +298,18 @@ test('hand raised above the head is an alternative start gesture', () => {
   const { events } = run(s, rep(up, 40), t);
   assert.equal(count(events, 'thumbsUp'), 1);
 });
+
+test('Ryu at point-blank range still hits: the arm box spans body to fist', () => {
+  const { s, t } = ready('WINDUP');
+  s.opp.dist = 0.35; // player is inside his old fist-tip position
+  const { events } = run(s, rep(figure(), 30), t);
+  assert.equal(count(events, 'playerHit'), 1);
+});
+
+test('the strike lunges forward so a small lean back does not escape', () => {
+  const { s, t } = ready('WINDUP');
+  const before = s.opp.dist;
+  let t1 = t; for (let i = 0; i < 40 && s.opp.state !== 'STRIKE'; i++) { t1 += 16; step(s, figure(), t1, undefined, FRAME); }
+  assert.equal(s.opp.state, 'STRIKE');
+  assert.ok(Math.abs(before - CONFIG.oppLunge - s.opp.dist) < 1e-9, `dist ${s.opp.dist}`);
+});

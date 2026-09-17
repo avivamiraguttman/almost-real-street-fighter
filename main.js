@@ -61,7 +61,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 // tuning sliders bound straight into CONFIG (state.cfg is the same object)
-const sliders = [['punchSpeed', 0.3, 4, 0.1], ['punchExt', 0.1, 0.6, 0.01], ['kickSpeed', 0.3, 4, 0.1], ['attackDist', 0.3, 1.2, 0.01], ['windupMs', 150, 1200, 10], ['approachSpeed', 0.2, 2, 0.05], ['visMin', 0.1, 0.95, 0.05], ['wristVisMin', 0.1, 0.95, 0.05], ['punchRearm', 0.05, 0.4, 0.01]];
+const sliders = [['punchSpeed', 0.3, 4, 0.1], ['punchExt', 0.1, 0.6, 0.01], ['kickSpeed', 0.3, 4, 0.1], ['attackDist', 0.3, 1.2, 0.01], ['windupMs', 150, 1200, 10], ['approachSpeed', 0.2, 2, 0.05], ['visMin', 0.1, 0.95, 0.05], ['wristVisMin', 0.1, 0.95, 0.05], ['punchRearm', 0.05, 0.4, 0.01], ['oppScale', 0.8, 1.6, 0.05], ['oppReach', 0.4, 1.0, 0.05], ['oppDmg', 5, 30, 1]];
 const panel = document.getElementById('panel');
 for (const [k, min, max, st] of sliders) {
   const row = document.createElement('label'); row.innerHTML = `<span>${k}</span><input type=range min=${min} max=${max} step=${st} value=${CONFIG[k]}><b>${CONFIG[k]}</b>`;
@@ -128,7 +128,7 @@ function loop() {
   ctx.drawImage(video, jx, 0, W, Hc);
   ctx.filter = 'none';
 
-  if (state.player.geom && state.boxes && state.phase !== 'calibrate') drawOpponent(ctx, sprites, state.opp, state.boxes, state.player.facing, state.player.H, now, state.winner);
+  if (state.player.geom && state.boxes && state.phase !== 'calibrate') drawOpponent(ctx, sprites, state.opp, state.boxes, state.player.facing, state.player.H * (CONFIG.oppScale || 1), now, state.winner);
   drawEffects(ctx, W, Hc, effects, now);
   drawHUD(ctx, W, state, CONFIG);
   if (state.phase === 'calibrate') drawCalibration(ctx, W, Hc, state, lmsPx);

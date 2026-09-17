@@ -18,7 +18,7 @@ export const CONFIG = {
   hitCooldownMs: 400, hitstunMs: 500,
   // opponent
   startDist: 1.5, approachSpeed: 0.6, attackDist: 0.55,
-  oppW: 0.30, oppH: 1.10, oppReach: 0.60, oppFist: 0.16, oppDmg: 18, armorInWindup: true, comboHits: 2,
+  oppW: 0.30, oppH: 1.10, oppReach: 0.75, oppLunge: 0.12, oppBody: 0.15, oppFist: 0.16, oppDmg: 14, oppScale: 1.15, armorInWindup: true, comboHits: 2,
   knockback: 0.50, hopback: 0.30,
   zoneFwd: 0.7, zoneDmgMul: 0.5, edgeMargin: 0.2, hipJumpMax: 0.5, hipJumpHoldMs: 700, // player may advance 0.35 H past the calibrated spot; Ryu stays 0.2 H inside the screen edge
   idleMs: 150, windupMs: 350, strikeMs: 150, recoverMs: 250, hopbackMs: 300, hurtMs: 350, noBodyResetMs: 1000,
@@ -83,9 +83,10 @@ export function playerGeometry(lms, cfg, lock) {
 export function opponentBoxes(g, opp, facing, cfg, homeX) {
   const H = g.H;
   const cx = (homeX ?? g.hipMid.x) + facing * opp.dist * H;
-  const hurt = { x: cx - cfg.oppW * H / 2, y: g.floorY - cfg.oppH * H, w: cfg.oppW * H, h: cfg.oppH * H };
-  const fx = cx - facing * cfg.oppReach * H;
-  const fist = { x: fx - cfg.oppFist * H / 2, y: g.nose.y - cfg.oppFist * H / 2, w: cfg.oppFist * H, h: cfg.oppFist * H };
+  const sc = cfg.oppScale || 1;
+  const hurt = { x: cx - cfg.oppW * sc * H / 2, y: g.floorY - cfg.oppH * sc * H, w: cfg.oppW * sc * H, h: cfg.oppH * sc * H };
+  const near = cx - facing * cfg.oppBody * H, far = cx - facing * cfg.oppReach * H; // whole arm, body edge to fist
+  const fist = { x: Math.min(near, far), y: g.nose.y - cfg.oppFist * H / 2, w: Math.abs(far - near), h: cfg.oppFist * H };
   return { cx, feetY: g.floorY, hurt, fist };
 }
 
@@ -232,7 +233,7 @@ export function step(state, lms, now, cfgOverride, frame) {
         o.dist = Math.max(p.offset + cfg.attackDist, o.dist - cfg.approachSpeed * dt / 1000);
         if (o.dist - p.offset <= cfg.attackDist + 1e-9) setOpp(o, 'WINDUP');
         break;
-      case 'WINDUP': if (o.stateT >= cfg.windupMs) { setOpp(o, 'STRIKE'); o.struck = false; o.landed = false; } break;
+      case 'WINDUP': if (o.stateT >= cfg.windupMs) { setOpp(o, 'STRIKE'); o.struck = false; o.landed = false; o.dist -= cfg.oppLunge || 0; } break;
       case 'STRIKE':
         if (!o.struck) {
           const hitHead = circleRect(g.head, boxes.fist), hitTorso = rectRect(g.torso, boxes.fist);
