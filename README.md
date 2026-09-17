@@ -3,15 +3,23 @@
 ### Fighting games are fun. Real fights are more fun. Real fights also hurt. We found the gap in the market.
 
 Playing Street Fighter on a computer is cool. Being *in* a street fight is, objectively, cooler.
-It is also a great way to lose teeth. So here is the next best thing: you throw the real punches,
-Ryu takes the real damage, and nobody files a police report.
+It is also a great way to lose teeth. So here is the next best thing.
+
+Every fighting game ever made puts a wall between you and the fight: a controller, a keyboard,
+a headset. We removed the wall. You walk up to a laptop, turn side-on, and you are standing in
+the game, at your own height, next to Ryu. Your real punches land. His real punches land. Nobody
+files a police report.
+
+**"Let me just step into the game."** That was the whole pitch. Then we stepped into the game.
+
+Built in one evening with Claude Code for a hackathon, and it won. Every round is logged frame by
+frame and the fight was balanced from those logs over ten rounds, from unplayable to close and fun.
+
+## What it is
 
 A webcam fighting game. You stand side-on in front of a laptop camera and fight Ryu from
 Street Fighter II with real punches, kicks and blocks. Your body is tracked with MediaPipe
-Pose; Ryu is drawn from the original sprite sheet next to you at your own height.
-
-Built in one evening with Claude Code for a hackathon. Every round is logged frame by frame
-and the fight was balanced from those logs over ten rounds.
+Pose; Ryu is drawn from the original sprite sheet next to you, scaled to your body.
 
 ## Run
 
