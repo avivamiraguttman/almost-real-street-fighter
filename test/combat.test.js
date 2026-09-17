@@ -245,8 +245,9 @@ test('both fists inside Ryu in the same frame count as one hit', () => {
   assert.equal(s.opp.hp, CONFIG.maxHp - 10);
 });
 
-test('a hit during WINDUP damages Ryu but does not cancel his punch', () => {
+test('a hit late in WINDUP damages Ryu but does not cancel his punch', () => {
   const { s, t } = ready('WINDUP');
+  s.opp.stateT = CONFIG.windupMs - CONFIG.armorTailMs + 10; // inside the armored tail
   const { events, t: t1 } = run(s, punchFrames(), t);
   assert.equal(count(events, 'oppHit'), 1);
   assert.equal(events.find((e) => e.type === 'oppHit').armored, true);
@@ -271,6 +272,24 @@ test('a guard hand beside the cheek or a fist raised for one frame is not a bloc
   const { s: s2, t: t2 } = ready('STRIKE');
   const { events: ev2 } = run(s2, rep(figure({ blockHand: true }), 3), t2); // guard appears only as the strike lands
   assert.equal(count(ev2, 'block'), 0); assert.equal(count(ev2, 'playerHit'), 1);
+});
+
+test('a hit early in WINDUP interrupts him (no armor yet)', () => {
+  const { s, t } = ready('WINDUP');
+  const { events } = run(s, punchFrames(), t);
+  assert.equal(count(events, 'oppHit'), 1);
+  assert.equal(events.find((e) => e.type === 'oppHit').armored, false);
+  assert.equal(s.opp.state, 'HURT');
+});
+
+test('every 4th attack is thrown from too far and whiffs', () => {
+  const { s, t } = ready();
+  s.opp.attackNo = 3; s.opp.dist = 1.4; s.opp.state = 'APPROACH'; s.opp.stateT = 0;
+  let t1 = t; for (let i = 0; i < 120 && s.opp.state !== 'WINDUP'; i++) { t1 += 16; step(s, figure(), t1, undefined, FRAME); }
+  assert.equal(s.opp.state, 'WINDUP');
+  assert.ok(s.opp.dist > CONFIG.attackDist + CONFIG.whiffExtra - 0.05, `wound up at ${s.opp.dist}`);
+  const { events } = run(s, rep(figure(), 40), t1);
+  assert.equal(count(events, 'playerHit'), 0);
 });
 
 test('after landing a punch Ryu chains a second one before hopping back', () => {

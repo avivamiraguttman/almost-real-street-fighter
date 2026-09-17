@@ -27,7 +27,7 @@ export function frameFor(opp, wallT, winner) {
   }
 }
 
-export function drawOpponent(ctx, sprites, opp, boxes, facing, H, wallT, winner) {
+export function drawOpponent(ctx, sprites, opp, boxes, facing, H, wallT, winner, slim = 1) {
   const s = H / SPRITE_REF_H;
   const name = frameFor(opp, wallT, winner);
   const fr = sprites && sprites.frames[name];
@@ -35,7 +35,7 @@ export function drawOpponent(ctx, sprites, opp, boxes, facing, H, wallT, winner)
   ctx.translate(boxes.cx, boxes.feetY);
   // opponent must face the player: if it stands on the right (facing=+1) it looks left.
   const flip = (facing === 1) === SHEET_FACES_RIGHT;
-  ctx.scale(flip ? -s : s, s);
+  ctx.scale((flip ? -s : s) * slim, s); // slim < 1 narrows him without changing height
   ctx.imageSmoothingEnabled = false;
   if (opp.armorFlashUntil && wallT < opp.armorFlashUntil) ctx.filter = 'brightness(1.8) saturate(0.2)'; // armored hit: white flash, no stagger
   if (fr) ctx.drawImage(sprites.sheet, fr.x, fr.y, fr.w, fr.h, -fr.ax, -fr.ay, fr.w, fr.h);

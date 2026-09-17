@@ -15,13 +15,13 @@ export const CONFIG = {
   kickSpeed: 1.2, kickLift: 0.25, kickRearm: 0.10,
   blockDist: 0.25, blockFront: 0.02, blockHoldMs: 100,
   punchDmg: 10, kickDmg: 15,
-  hitCooldownMs: 400, hitstunMs: 500,
+  hitCooldownMs: 400, hitstunMs: 400,
   // opponent
-  startDist: 1.5, approachSpeed: 1.2, attackDist: 0.70, oppMinDist: 0.30, retreatWarn: 0.45,
-  oppW: 0.30, oppH: 1.10, oppReach: 0.75, oppLunge: 0.12, oppBody: 0.15, oppFist: 0.16, oppDmg: 14, oppScale: 1.0, armorInWindup: true, comboHits: 2,
-  knockback: 0.50, hopback: 0.30,
+  startDist: 1.5, approachSpeed: 0.8, attackDist: 0.70, oppMinDist: 0.30, retreatWarn: 0.45, whiffEvery: 4, whiffExtra: 0.3, comboEvery: 2,
+  oppW: 0.24, oppSlim: 0.88, oppH: 1.10, oppReach: 0.70, oppLunge: 0.08, oppBody: 0.12, oppFist: 0.16, oppDmg: 10, oppScale: 1.0, armorInWindup: true, armorTailMs: 150, comboHits: 2,
+  knockback: 0.70, hopback: 0.55,
   zoneFwd: 0.7, zoneDmgMul: 0.5, edgeMargin: 0.2, hipJumpMax: 0.5, hipJumpHoldMs: 700, // player may advance 0.35 H past the calibrated spot; Ryu stays 0.2 H inside the screen edge
-  idleMs: 150, windupMs: 350, strikeMs: 150, recoverMs: 250, recoverBlockedMs: 700, hopbackMs: 300, hurtMs: 350, noBodyResetMs: 1000,
+  idleMs: 150, windupMs: 350, strikeMs: 150, recoverMs: 250, recoverBlockedMs: 700, hopbackMs: 400, hurtMs: 350, noBodyResetMs: 1000,
   velWindowMs: 50, maxSpeed: 12, // velocity over ~3 frames; anything faster is a landmark teleport
   // calibration
   calibHoldMs: 1500, sizeMin: 0.30, sizeMax: 0.80, roomForOpp: 1.3, lumaMin: 50, lumaMax: 210, jitterMax: 0.03, fpsMin: 15,
@@ -236,18 +236,22 @@ export function step(state, lms, now, cfgOverride, frame) {
   if (o.state !== 'KO') {
     o.stateT += dt;
     switch (o.state) {
-      case 'IDLE':
+      case 'IDLE': {
+        const range = cfg.attackDist + (((o.attackNo || 0) + 1) % cfg.whiffEvery === 0 ? cfg.whiffExtra : 0); // every 4th attack is thrown from too far
         if (o.stateT >= cfg.idleMs) {
-          if (gap <= cfg.attackDist) setOpp(o, 'WINDUP');
+          if (gap <= range) beginWindup(o);
           else if (o.dist > cfg.oppMinDist + 1e-9) setOpp(o, 'APPROACH');
           else o.stateT = 0; // player has retreated out of the ring: Ryu waits at the line
         }
         break;
-      case 'APPROACH':
-        o.dist = Math.max(cfg.oppMinDist, p.offset + cfg.attackDist, o.dist - cfg.approachSpeed * dt / 1000);
-        if (o.dist - p.offset <= cfg.attackDist + 1e-9) setOpp(o, 'WINDUP');
+      }
+      case 'APPROACH': {
+        const range = cfg.attackDist + (((o.attackNo || 0) + 1) % cfg.whiffEvery === 0 ? cfg.whiffExtra : 0);
+        o.dist = Math.max(cfg.oppMinDist, p.offset + range, o.dist - cfg.approachSpeed * dt / 1000);
+        if (o.dist - p.offset <= range + 1e-9) beginWindup(o);
         else if (o.dist <= cfg.oppMinDist + 1e-9) setOpp(o, 'IDLE');
         break;
+      }
       case 'WINDUP': if (o.stateT >= cfg.windupMs) { setOpp(o, 'STRIKE'); o.struck = false; o.landed = false; o.blocked = false; o.dist -= cfg.oppLunge || 0; } break;
       case 'STRIKE':
         if (!o.struck) {
@@ -269,7 +273,7 @@ export function step(state, lms, now, cfgOverride, frame) {
       case 'RECOVER':
         if (o.stateT >= (o.blocked ? cfg.recoverBlockedMs : cfg.recoverMs)) {
           if (o.blocked) { o.blocked = false; o.chain = 0; setOpp(o, 'HOPBACK'); } // blocked: stagger, then back off, no combo
-          else if (o.landed && (o.chain = (o.chain || 0) + 1) < cfg.comboHits && gap <= cfg.attackDist + 0.15) setOpp(o, 'WINDUP'); // combo: punch again
+          else if (o.landed && (o.attackNo || 0) % cfg.comboEvery === 0 && (o.chain = (o.chain || 0) + 1) < cfg.comboHits && gap <= cfg.attackDist + 0.15) setOpp(o, 'WINDUP'); // combo on even-numbered attacks only
           else { o.chain = 0; setOpp(o, o.landed ? 'HOPBACK' : 'APPROACH'); }
         }
         break;
@@ -290,7 +294,7 @@ function hitOpponent(state, dmg, now, at, events, cfg) {
   const p = state.player, o = state.opp;
   o.hp = Math.max(0, o.hp - dmg);
   p.cooldownUntil = now + cfg.hitCooldownMs;
-  const armored = cfg.armorInWindup && (o.state === 'WINDUP' || o.state === 'STRIKE');
+  const armored = cfg.armorInWindup && (o.state === 'STRIKE' || (o.state === 'WINDUP' && o.stateT >= cfg.windupMs - cfg.armorTailMs));
   events.push({ type: 'oppHit', dmg, x: at.x, y: at.y, dir: p.facing, armored });
   if (o.hp === 0) { setOpp(o, 'KO'); state.phase = 'ko'; state.winner = 'YOU'; state.koAt = now; state.perfect = p.hp === cfg.maxHp; events.push({ type: 'ko', winner: 'YOU' }); }
   else if (!armored) setOpp(o, 'HURT'); // armored: Ryu takes the damage and keeps swinging (a trade)
@@ -298,6 +302,7 @@ function hitOpponent(state, dmg, now, at, events, cfg) {
 }
 
 function setOpp(o, s) { o.state = s; o.stateT = 0; }
+function beginWindup(o) { o.attackNo = (o.attackNo || 0) + 1; setOpp(o, 'WINDUP'); }
 
 function snapshot(g) {
   const wrists = {};

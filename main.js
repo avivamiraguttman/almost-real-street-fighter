@@ -62,7 +62,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 // tuning sliders bound straight into CONFIG (state.cfg is the same object)
-const sliders = [['punchSpeed', 0.3, 4, 0.1], ['punchExt', 0.1, 0.6, 0.01], ['kickSpeed', 0.3, 4, 0.1], ['attackDist', 0.3, 1.2, 0.01], ['windupMs', 150, 1200, 10], ['approachSpeed', 0.2, 2, 0.05], ['visMin', 0.1, 0.95, 0.05], ['wristVisMin', 0.1, 0.95, 0.05], ['punchRearm', 0.05, 0.4, 0.01], ['oppScale', 0.8, 1.6, 0.05], ['oppReach', 0.4, 1.0, 0.05], ['oppDmg', 5, 30, 1]];
+const sliders = [['punchSpeed', 0.3, 4, 0.1], ['punchExt', 0.1, 0.6, 0.01], ['kickSpeed', 0.3, 4, 0.1], ['attackDist', 0.3, 1.2, 0.01], ['windupMs', 150, 1200, 10], ['approachSpeed', 0.2, 2, 0.05], ['visMin', 0.1, 0.95, 0.05], ['wristVisMin', 0.1, 0.95, 0.05], ['punchRearm', 0.05, 0.4, 0.01], ['oppScale', 0.8, 1.6, 0.05], ['oppReach', 0.4, 1.0, 0.05], ['oppDmg', 5, 30, 1], ['oppSlim', 0.7, 1.1, 0.02], ['knockback', 0.2, 1.2, 0.05], ['hopback', 0.1, 1.0, 0.05]];
 const panel = document.getElementById('panel');
 for (const [k, min, max, st] of sliders) {
   const row = document.createElement('label'); row.innerHTML = `<span>${k}</span><input type=range min=${min} max=${max} step=${st} value=${CONFIG[k]}><b>${CONFIG[k]}</b>`;
@@ -122,15 +122,15 @@ function loop() {
   record(now, events);
 
   // video layer with knockback jolt
-  const ja = Math.max(0, 1 - (now - jolt.t0) / 300);
-  const jx = jolt.dir * 30 * ja * ja;
+  const ja = Math.max(0, 1 - (now - jolt.t0) / 420);
+  const jx = jolt.dir * 60 * ja * ja; // bigger, longer knockback jolt on the video layer
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, Hc);
   if (state.phase === 'ko' && state.winner === 'RYU') ctx.filter = 'grayscale(0.85) brightness(0.7)';
   ctx.drawImage(video, jx, 0, W, Hc);
   ctx.filter = 'none';
 
   if (onTitle) { drawTitleScreen(ctx, W, Hc, now); requestAnimationFrame(loop); return; }
-  if (state.player.geom && state.boxes && state.phase !== 'calibrate') drawOpponent(ctx, sprites, state.opp, state.boxes, state.player.facing, state.player.H * (CONFIG.oppScale || 1), now, state.winner);
+  if (state.player.geom && state.boxes && state.phase !== 'calibrate') drawOpponent(ctx, sprites, state.opp, state.boxes, state.player.facing, state.player.H * (CONFIG.oppScale || 1), now, state.winner, CONFIG.oppSlim || 1);
   drawEffects(ctx, W, Hc, effects, now);
   drawHUD(ctx, W, state, CONFIG);
   if (state.phase === 'calibrate') drawCalibration(ctx, W, Hc, state, lmsPx);
