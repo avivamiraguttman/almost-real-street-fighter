@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, step, startFight, recalibrate, calibrationChecks, CONFIG, LM } from '../combat.js';
+import { createGame, step, startFight, recalibrate, calibrationChecks, selectPose, detectThumbsUp, CONFIG, LM } from '../combat.js';
 
 const H = 400, FLOOR = 600, HIP = 300;
 // Standing side-profile figure facing +x. Overrides are in H units relative to shoulder / floor.
@@ -163,17 +163,41 @@ test('recalibrate drops the lock and returns to the calibrate phase', () => {
   assert.equal(s.phase, 'calibrate'); assert.equal(s.lock, null);
 });
 
-test('walking toward Ryu past the home zone disables strikes and fires stepBack', () => {
+test('advancing past the home zone warns and halves damage but never blocks hits', () => {
   const { s, t } = ready();
-  const forward = punchFrames().map((f) => f.map((p) => ({ ...p, x: p.x + 0.5 * H }))); // whole body 0.5 H forward
+  s.opp.dist = CONFIG.attackDist + 0.9; // Ryu knocked away; player chases 0.9 H forward
+  s.player.lastHip = null; // the walk itself is not under test, skip the teleport guard
+  const forward = punchFrames().map((f) => f.map((p) => ({ ...p, x: p.x + 0.9 * H })));
   const { events } = run(s, forward, t);
   assert.equal(count(events, 'stepBack'), 1);
-  assert.equal(count(events, 'oppHit'), 0);
   assert.equal(s.player.outOfZone, true);
-  // back home: strikes work again
-  const { events: ev2 } = run(s, punchFrames(), t + 400);
-  assert.equal(s.player.outOfZone, false);
+  assert.equal(count(events, 'oppHit'), 1);
+  assert.equal(s.opp.hp, 95); // half of 10
+});
+
+test('a missed swing is logged with reason range; a swing during cooldown says cooldown', () => {
+  const { s, t } = ready();
+  s.opp.dist = 1.5; // out of reach
+  const { events, t: t1 } = run(s, punchFrames(), t);
+  const swings = events.filter((e) => e.type === 'swing');
+  assert.equal(swings.length, 1); assert.equal(swings[0].reason, 'range');
+  s.opp.dist = CONFIG.attackDist; s.opp.state = 'IDLE'; s.opp.stateT = 0;
+  const { events: ev2 } = run(s, [...punchFrames(), ...punchFrames()], t1);
   assert.equal(count(ev2, 'oppHit'), 1);
+  assert.deepEqual(ev2.filter((e) => e.type === 'swing').map((e) => e.reason), ['cooldown']);
+});
+
+test('a second person: nearest-hips pose is selected and a hip teleport is rejected briefly', () => {
+  const me = figure(), other = figure().map((p) => ({ ...p, x: p.x + 600 }));
+  assert.equal(selectPose([other, me], { x: 300, y: 400 }, null, CONFIG), me);
+  assert.equal(selectPose([me, other], null, 900, CONFIG), other);
+  const { s, t } = ready();
+  const ev = step(s, other, t + 16, undefined, FRAME); // tracker jumps to the other person
+  assert.equal(count(ev, 'poseJump'), 1);
+  assert.equal(s.noBody, true);
+  // if the jump persists past the hold window it is accepted (the player really moved)
+  let t2 = t + 16; for (let i = 0; i < 60; i++) { t2 += 16; step(s, other, t2, undefined, FRAME); }
+  assert.equal(s.noBody, false);
 });
 
 test('Ryu is anchored to the room: player stepping forward closes the gap, Ryu does not slide', () => {
@@ -193,4 +217,19 @@ test('knockback is clamped at the screen edge', () => {
   s.opp.state = 'HURT'; s.opp.stateT = 0;
   run(s, rep(figure(), 30), t);
   assert.ok(s.opp.dist <= 2.25 + 1e-9, `dist ${s.opp.dist}`);
+});
+
+test('thumbs up held for 800 ms in READY fires thumbsUp; a normal stance does not', () => {
+  const s = createGame(CONFIG);
+  let { t } = run(s, rep(figure(), 130), 0);
+  assert.equal(s.phase, 'ready');
+  const thumbs = figure();
+  const w = { x: 300, y: 600 - 0.85 * H, visibility: 1 }; // hand at shoulder height
+  thumbs[LM.L_WRIST] = w; thumbs[21] = { x: w.x, y: w.y - 0.1 * H, visibility: 1 }; thumbs[19] = { x: w.x + 0.03 * H, y: w.y + 0.02 * H, visibility: 1 };
+  assert.equal(detectThumbsUp(thumbs, s.player.geom, CONFIG), true);
+  assert.equal(detectThumbsUp(figure(), s.player.geom, CONFIG), false);
+  const { events } = run(s, rep(thumbs, 60), t); // ~1 s
+  assert.equal(count(events, 'thumbsUp'), 1);
+  const { events: ev2 } = run(s, rep(figure(), 60), t + 1000);
+  assert.equal(count(ev2, 'thumbsUp'), 0);
 });

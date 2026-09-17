@@ -56,7 +56,9 @@ export function drawHUD(ctx, W, state, cfg) {
     ctx.font = 'bold 32px "Courier New", monospace'; ctx.lineWidth = 5; ctx.fillStyle = '#fff';
     const msg = state.winner === 'YOU' ? 'YOU WIN' : 'RYU WINS';
     ctx.strokeText(msg, W / 2, 250); ctx.fillText(msg, W / 2, 250);
-    ctx.font = '20px "Courier New", monospace'; ctx.strokeText('press R to restart', W / 2, 290); ctx.fillText('press R to restart', W / 2, 290);
+    ctx.font = '20px "Courier New", monospace'; ctx.strokeText('thumbs up or SPACE: rematch   R: ready screen   L: download log', W / 2, 290); ctx.fillText('thumbs up or SPACE: rematch   R: ready screen   L: download log', W / 2, 290);
+    const tp = state.player.thumbProgress || 0;
+    if (tp > 0) { ctx.fillStyle = '#333'; ctx.fillRect(W / 2 - 150, 310, 300, 14); ctx.fillStyle = '#3ddc5a'; ctx.fillRect(W / 2 - 150, 310, 300 * tp, 14); }
   }
   if (p.outOfZone && state.phase === 'fighting') {
     ctx.font = 'bold 56px "Courier New", monospace'; ctx.lineWidth = 6; ctx.strokeStyle = '#000'; ctx.fillStyle = '#ff5a5a';
@@ -140,7 +142,9 @@ export function drawCalibration(ctx, W, Hc, state, lmsPx) {
 export function drawReady(ctx, W, Hc, state) {
   ctx.save(); ctx.textAlign = 'center'; ctx.lineWidth = 6; ctx.strokeStyle = '#000';
   ctx.font = 'bold 40px "Courier New", monospace'; ctx.fillStyle = '#fff';
-  ctx.strokeText('press SPACE to FIGHT', W / 2, Hc / 2); ctx.fillText('press SPACE to FIGHT', W / 2, Hc / 2);
+  ctx.strokeText('THUMBS UP or SPACE to FIGHT', W / 2, Hc / 2); ctx.fillText('THUMBS UP or SPACE to FIGHT', W / 2, Hc / 2);
+  const tp = state.player.thumbProgress || 0;
+  if (tp > 0) { ctx.fillStyle = '#333'; ctx.fillRect(W / 2 - 150, Hc / 2 + 60, 300, 14); ctx.fillStyle = '#3ddc5a'; ctx.fillRect(W / 2 - 150, Hc / 2 + 60, 300 * tp, 14); }
   ctx.font = '20px "Courier New", monospace'; ctx.fillStyle = '#ccc'; ctx.lineWidth = 4;
   const msg = `scale locked: body ${Math.round(state.lock.H)} px, facing ${state.lock.facing === 1 ? 'right' : 'left'}   |   C = recalibrate`;
   ctx.strokeText(msg, W / 2, Hc / 2 + 40); ctx.fillText(msg, W / 2, Hc / 2 + 40);

@@ -21,8 +21,32 @@ for (const n of ['punch', 'kick', 'hit', 'block', 'ko', 'fight']) { const a = ne
 const music = new Audio('assets/audio/music.mp3'); music.loop = true; music.volume = 0.35; music.onerror = () => {};
 const play = (n) => { const a = SFX[n]; if (!a) return; try { const c = a.cloneNode(); c.volume = 0.9; c.play().catch(() => {}); } catch (e) {} };
 
+// browsers block audio until the page has had a click or key press; unlock on the first one
+let audioUnlocked = false;
+function unlockAudio() { if (audioUnlocked) return; audioUnlocked = true; music.play().then(() => { if (state.phase !== 'fighting') music.pause(); }).catch(() => {}); }
+document.addEventListener('keydown', unlockAudio, { once: true }); document.addEventListener('pointerdown', unlockAudio, { once: true });
+
+// --- gameplay recorder: one compact row per frame + all events; downloaded on KO or with L ---
+let rec = null;
+function startRec() { rec = { startedAt: new Date().toISOString(), cfg: { ...CONFIG }, lock: { ...state.lock }, W: frame.W, Hc: frame.Hc, frames: [], events: [] }; }
+function record(now, events) {
+  if (!rec || state.phase !== 'fighting' && state.phase !== 'ko') return;
+  const p = state.player, o = state.opp, d = p.debug || { ext: {}, vx: {} };
+  rec.frames.push([Math.round(now), state.phase[0], p.hp, o.hp, o.state, +o.dist.toFixed(3), +(p.offset ?? 0).toFixed(3), p.outOfZone ? 1 : 0, p.blocking ? 1 : 0, state.noBody ? 1 : 0,
+    +(d.ext[15] ?? 0).toFixed(2), +(d.vx[15] ?? 0).toFixed(2), +(d.ext[16] ?? 0).toFixed(2), +(d.vx[16] ?? 0).toFixed(2), +(d.lift ?? 0).toFixed(2), +(d.avx ?? 0).toFixed(2),
+    lmsPx ? lmsPx.map((q) => [Math.round(q.x), Math.round(q.y), +q.visibility.toFixed(2)]) : null]);
+  for (const e of events) rec.events.push({ t: Math.round(now), ...e });
+}
+function downloadRec() {
+  if (!rec || !rec.frames.length) return;
+  const blob = new Blob([JSON.stringify(rec)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `fightlog-${rec.startedAt.replace(/[:.]/g, '-')}.json`; a.click();
+}
+document.addEventListener('keydown', (e) => { if (e.key === 'l' || e.key === 'L') downloadRec(); });
+
 function beginFight() {
   if (!startFight(state)) return;
+  startRec();
   effects = []; play('fight');
   music.currentTime = 0; music.play().catch(() => {});
 }
@@ -85,11 +109,13 @@ function loop() {
   for (const e of events) {
     if (e.type === 'oppHit') { play(e.dmg >= CONFIG.kickDmg ? 'kick' : 'punch'); effects.push({ type: 'spark', t0: now, x: e.x, y: e.y }, { type: 'popup', t0: now, x: e.x, y: e.y - 30, text: `-${e.dmg}`, color: '#ffd400' }); }
     if (e.type === 'playerHit') { play('hit'); effects.push({ type: 'spark', t0: now, x: e.x, y: e.y }, { type: 'popup', t0: now, x: e.x, y: e.y - 30, text: `-${e.dmg}`, color: '#ff5a5a' }, { type: 'flash', t0: now }); jolt = { t0: now, dir: e.dir }; }
-    if (e.type === 'ko') { play('ko'); music.pause(); }
+    if (e.type === 'ko') { play('ko'); music.pause(); setTimeout(downloadRec, 300); }
+    if (e.type === 'thumbsUp') beginFight();
     if (e.type === 'stepBack') play('block');
     if (e.type === 'block') { play('block'); } if (e.type === 'block') effects.push({ type: 'popup', t0: now, x: e.x, y: e.y - 30, text: 'BLOCK', color: '#7cf' });
   }
   effects = pruneEffects(effects, now);
+  record(now, events);
 
   // video layer with knockback jolt
   const ja = Math.max(0, 1 - (now - jolt.t0) / 300);
