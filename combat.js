@@ -10,7 +10,7 @@ export const CONFIG = {
   visMin: 0.6,
   calibMs: 2000,
   // player
-  headR: 0.09, fistR: 0.06, footR: 0.07, torsoMinW: 0.25,
+  headR: 0.09, fistR: 0.09, footR: 0.09, torsoMinW: 0.25,
   punchSpeed: 1.2, punchExt: 0.12, punchRearm: 0.10, punchActiveMs: 150, wristVisMin: 0.5,
   kickSpeed: 1.2, kickLift: 0.25, kickRearm: 0.10,
   blockDist: 0.25, blockFront: 0.02, blockHoldMs: 100,
@@ -18,14 +18,14 @@ export const CONFIG = {
   hitCooldownMs: 400, hitstunMs: 400,
   // opponent
   startDist: 1.5, approachSpeed: 0.8, attackDist: 0.70, oppMinDist: 0.30, retreatWarn: 0.45, whiffEvery: 4, whiffExtra: 0.3, comboEvery: 2,
-  oppW: 0.24, oppSlim: 0.88, oppH: 1.10, oppReach: 0.70, oppLunge: 0.08, oppBody: 0.12, oppFist: 0.16, oppDmg: 10, oppScale: 1.0, armorInWindup: true, armorTailMs: 150, comboHits: 2,
+  oppFront: 0.20, oppBack: 0.12, oppSlim: 0.88, oppH: 1.10, oppReach: 0.70, oppLunge: 0.08, oppBody: 0.12, oppFist: 0.16, oppDmg: 10, oppScale: 1.0, armorInWindup: true, armorTailMs: 120, comboHits: 2,
   knockback: 0.70, hopback: 0.55,
   zoneFwd: 0.7, zoneDmgMul: 0.5, edgeMargin: 0.2, hipJumpMax: 0.5, hipJumpHoldMs: 700, // player may advance 0.35 H past the calibrated spot; Ryu stays 0.2 H inside the screen edge
-  idleMs: 150, windupMs: 350, strikeMs: 150, recoverMs: 250, recoverBlockedMs: 700, hopbackMs: 400, hurtMs: 350, noBodyResetMs: 1000,
+  idleMs: 150, windupMs: 300, strikeMs: 150, recoverMs: 250, recoverBlockedMs: 500, hopbackMs: 300, hurtMs: 350, noBodyResetMs: 1000,
   velWindowMs: 50, maxSpeed: 12, // velocity over ~3 frames; anything faster is a landmark teleport
   // calibration
   calibHoldMs: 1500, sizeMin: 0.30, sizeMax: 0.80, roomForOpp: 1.3, lumaMin: 50, lumaMax: 210, jitterMax: 0.03, fpsMin: 15,
-  maxHp: 150,
+  maxHp: 120,
   thumbHoldMs: 500, thumbUp: 0.03, fistTight: 0.22, handUpAbove: 0.10,
 };
 
@@ -84,7 +84,8 @@ export function opponentBoxes(g, opp, facing, cfg, homeX) {
   const H = g.H;
   const cx = (homeX ?? g.hipMid.x) + facing * opp.dist * H;
   const sc = cfg.oppScale || 1;
-  const hurt = { x: cx - cfg.oppW * sc * H / 2, y: g.floorY - cfg.oppH * sc * H, w: cfg.oppW * sc * H, h: cfg.oppH * sc * H };
+  const fx = cx - facing * cfg.oppFront * sc * H, bx = cx + facing * cfg.oppBack * sc * H; // guard side reaches further toward you
+  const hurt = { x: Math.min(fx, bx), y: g.floorY - cfg.oppH * sc * H, w: Math.abs(bx - fx), h: cfg.oppH * sc * H };
   const near = cx - facing * cfg.oppBody * H, far = cx - facing * cfg.oppReach * H; // whole arm, body edge to fist
   const fist = { x: Math.min(near, far), y: g.nose.y - cfg.oppFist * H / 2, w: Math.abs(far - near), h: cfg.oppFist * H };
   return { cx, feetY: g.floorY, hurt, fist };
@@ -143,6 +144,7 @@ export function step(state, lms, now, cfgOverride, frame) {
     return events;
   }
   if (state.phase !== 'fighting') {
+    if (state.phase === 'ko') o.stateT += dt; // keep the KO / victory animation clock running
     p.facing = state.lock ? state.lock.facing : g.facingRaw;
     state.boxes = opponentBoxes(g, o, p.facing, cfg, state.lock && state.lock.homeX);
     // thumbs-up held for thumbHoldMs starts the round (alternative to SPACE)
@@ -264,7 +266,7 @@ export function step(state, lms, now, cfgOverride, frame) {
               o.landed = true;
               p.hp = Math.max(0, p.hp - cfg.oppDmg); p.hitstunUntil = now + cfg.hitstunMs;
               events.push({ type: 'playerHit', dmg: cfg.oppDmg, x: cx, y: cy, dir: -f });
-              if (p.hp === 0) { state.phase = 'ko'; state.winner = 'RYU'; state.koAt = now; state.perfect = o.hp === cfg.maxHp; events.push({ type: 'ko', winner: 'RYU' }); }
+              if (p.hp === 0) { state.phase = 'ko'; state.winner = 'RYU'; state.koAt = now; state.perfect = o.hp === cfg.maxHp; setOpp(o, 'WIN'); events.push({ type: 'ko', winner: 'RYU' }); }
             }
           }
         }

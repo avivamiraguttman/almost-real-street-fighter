@@ -132,7 +132,7 @@ function loop() {
   if (onTitle) { drawTitleScreen(ctx, W, Hc, now); requestAnimationFrame(loop); return; }
   if (state.player.geom && state.boxes && state.phase !== 'calibrate') drawOpponent(ctx, sprites, state.opp, state.boxes, state.player.facing, state.player.H * (CONFIG.oppScale || 1), now, state.winner, CONFIG.oppSlim || 1);
   drawEffects(ctx, W, Hc, effects, now);
-  drawHUD(ctx, W, state, CONFIG);
+  drawHUD(ctx, W, Hc, state, CONFIG);
   if (state.phase === 'calibrate') drawCalibration(ctx, W, Hc, state, lmsPx);
   if (state.phase === 'ready') drawReady(ctx, W, Hc, state);
   if (lastSave && now - lastSaveT < 3000) { ctx.font = 'bold 22px monospace'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(0,0,0,.7)'; ctx.fillRect(W / 2 - 320, Hc - 70, 640, 40); ctx.fillStyle = '#9f9'; ctx.fillText(lastSave, W / 2, Hc - 42); }

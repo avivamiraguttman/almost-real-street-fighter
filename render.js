@@ -20,9 +20,8 @@ export function frameFor(opp, wallT, winner) {
     case 'RECOVER': return seq(['med-punch-2', 'med-punch-1'], 200, t);
     case 'HOPBACK': return 'jump-roll-7';
     case 'HURT': return seq(['hit-face-1', 'hit-face-2', 'hit-face-3'], 100, t);
-    case 'KO': return winner === 'RYU'
-      ? seq(['victory-1', 'victory-2', 'victory-3', 'victory-4'], 150, t) // Ryu won: victory pose
-      : seq(['fall-1', 'fall-2', 'fall-3', 'fall-4', 'fall-5'], 120, t);
+    case 'WIN': return seq(['victory-1', 'victory-2', 'victory-3', 'victory-4'], 150, t); // Ryu won: victory pose
+    case 'KO': return seq(['fall-1', 'fall-2', 'fall-3', 'fall-4', 'fall-5'], 120, t);
     default: return 'idle-1';
   }
 }
@@ -43,7 +42,7 @@ export function drawOpponent(ctx, sprites, opp, boxes, facing, H, wallT, winner,
   ctx.restore();
 }
 
-export function drawHUD(ctx, W, state, cfg) {
+export function drawHUD(ctx, W, Hc, state, cfg) {
   const p = state.player, o = state.opp;
   const barW = W * 0.38, barH = 22, y = 24;
   const leftIsYou = p.facing === 1;
