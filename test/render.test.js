@@ -47,7 +47,7 @@ test('every screen renders without throwing, including both K.O. endings', () =>
     for (let i = 0; i < 130; i++) { t += 16; step(s, fig(), t, undefined, FR); if (i % 40 === 0) drawAll(s, t, fig()); }
     assert.equal(s.phase, 'ready'); drawAll(s, t, fig());
     startFight(s); drawAll(s, t, fig());
-    if (loser === 'player') { s.player.hp = 10; s.opp.dist = CONFIG.attackDist; s.opp.state = 'STRIKE'; s.opp.stateT = 0; } else { s.opp.hp = 5; s.opp.dist = CONFIG.attackDist; }
+    if (loser === 'player') { s.player.hp = 10; s.player.revived = true; s.opp.dist = CONFIG.attackDist; s.opp.state = 'STRIKE'; s.opp.stateT = 0; } else { s.opp.hp = 5; s.opp.dist = CONFIG.attackDist; }
     let ko = false;
     for (let i = 0; i < 200 && !ko; i++) { t += 16; const ev = step(s, fig(loser === 'ryu' ? 0.2 + 0.1 * (i % 6) : 0.1), t, undefined, FR); drawAll(s, t, fig()); ko = ev.some((e) => e.type === 'ko'); }
     assert.equal(s.phase, 'ko', `${loser} should have lost`);

@@ -25,7 +25,7 @@ export const CONFIG = {
   velWindowMs: 50, maxSpeed: 12, // velocity over ~3 frames; anything faster is a landmark teleport
   // calibration
   calibHoldMs: 1500, sizeMin: 0.30, sizeMax: 0.80, roomForOpp: 1.3, lumaMin: 50, lumaMax: 210, jitterMax: 0.03, fpsMin: 15,
-  maxHp: 120,
+  maxHp: 120, reviveFrac: 0.3, // once per round, when you would be KO'd you come back with this fraction (0 disables)
   thumbHoldMs: 500, thumbUp: 0.03, fistTight: 0.22, handUpAbove: 0.10,
 };
 
@@ -76,6 +76,7 @@ export function playerGeometry(lms, cfg, lock) {
     torso: { x: torsoCx - torsoW / 2, y: shoulderMid.y, w: torsoW, h: hipMid.y - shoulderMid.y },
     wrists: [LM.L_WRIST, LM.R_WRIST].filter((i) => lms[i] && lms[i].visibility >= (cfg.wristVisMin ?? cfg.visMin)).map((i) => ({ id: i, x: lms[i].x, y: lms[i].y, r: cfg.fistR * H })),
     ankle: ankles.length === 2 ? (lms[LM.L_ANKLE].visibility >= lms[LM.R_ANKLE].visibility ? lms[LM.L_ANKLE] : lms[LM.R_ANKLE]) : ankles[0],
+    ankles: [LM.L_ANKLE, LM.R_ANKLE].filter((i) => vis(lms[i], cfg)).map((i) => ({ id: i, x: lms[i].x, y: lms[i].y })),
   };
 }
 
@@ -211,10 +212,11 @@ export function step(state, lms, now, cfgOverride, frame) {
       }
     }
   }
-  const a = g.ankle;
+  // kicking foot = whichever visible ankle is highest off the floor
+  const a = g.ankles.length ? g.ankles.reduce((best, k) => (k.y < best.y ? k : best), g.ankles[0]) : null;
   if (a) {
     const lift = (g.floorY - a.y) / H;
-    const pa = prev && prev.ankle;
+    const pa = prev && prev.ankles && prev.ankles[a.id];
     const vx = pa ? speed(a.x, pa.x) : 0;
     p.debug.lift = lift; p.debug.avx = vx;
     if (lift < cfg.kickRearm) { p.kickArmed = true; p.kickSwung = false; }
@@ -266,7 +268,11 @@ export function step(state, lms, now, cfgOverride, frame) {
               o.landed = true;
               p.hp = Math.max(0, p.hp - cfg.oppDmg); p.hitstunUntil = now + cfg.hitstunMs;
               events.push({ type: 'playerHit', dmg: cfg.oppDmg, x: cx, y: cy, dir: -f });
-              if (p.hp === 0) { state.phase = 'ko'; state.winner = 'RYU'; state.koAt = now; state.perfect = o.hp === cfg.maxHp; setOpp(o, 'WIN'); events.push({ type: 'ko', winner: 'RYU' }); }
+              if (p.hp === 0 && cfg.reviveFrac > 0 && !p.revived) { // second wind
+                p.revived = true; p.hp = Math.round(cfg.maxHp * cfg.reviveFrac); p.hitstunUntil = now + 300; p.reviveAt = now;
+                o.chain = 0; o.landed = false; setOpp(o, 'HOPBACK'); // Ryu backs off to give you room
+                events.push({ type: 'revive', hp: p.hp });
+              } else if (p.hp === 0) { state.phase = 'ko'; state.winner = 'RYU'; state.koAt = now; state.perfect = o.hp === cfg.maxHp; setOpp(o, 'WIN'); events.push({ type: 'ko', winner: 'RYU' }); }
             }
           }
         }
@@ -309,7 +315,9 @@ function beginWindup(o) { o.attackNo = (o.attackNo || 0) + 1; setOpp(o, 'WINDUP'
 function snapshot(g) {
   const wrists = {};
   for (const w of g.wrists) wrists[w.id] = { x: w.x, y: w.y };
-  return { wrists, ankle: g.ankle ? { x: g.ankle.x, y: g.ankle.y } : null };
+  const ankles = {};
+  for (const k of g.ankles || []) ankles[k.id] = { x: k.x, y: k.y };
+  return { wrists, ankle: g.ankle ? { x: g.ankle.x, y: g.ankle.y } : null, ankles };
 }
 
 const median = (a) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : null; };
@@ -363,7 +371,7 @@ export function calibrationChecks(g, lms, W, Hc, frame, noseHist, cfg) {
 export function startFight(state) {
   if (!state.lock) return false;
   const cfg = state.cfg;
-  state.player.hp = cfg.maxHp; state.player.hitstunUntil = 0; state.player.cooldownUntil = 0;
+  state.player.hp = cfg.maxHp; state.player.hitstunUntil = 0; state.player.cooldownUntil = 0; state.player.revived = false; state.player.reviveAt = null;
   state.opp = { hp: cfg.maxHp, dist: cfg.startDist, state: 'IDLE', stateT: 0, landed: false, struck: false, hitstunUntil: 0 };
   state.winner = null; state.phase = 'fighting';
   if (state.player.geom) state.lock.homeX = state.player.geom.hipMid.x; // home = where you stand when the round starts

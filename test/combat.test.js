@@ -367,3 +367,33 @@ test('a blocked punch staggers Ryu: long recover, no combo, then hop back', () =
   assert.deepEqual(seen.slice(0, 4), ['WINDUP', 'STRIKE', 'RECOVER', 'HOPBACK'], seen.join(','));
   assert.equal(s.player.hp, CONFIG.maxHp);
 });
+
+test('a kick with the far leg counts even when the near ankle is the more visible one', () => {
+  const { s, t } = ready();
+  s.opp.dist = 0.6;
+  // right ankle (less visible: 0.8 vs left 1.0) rises and swings forward
+  const frames = [0.05, 0.15, 0.28, 0.36, 0.40, 0.40, 0.30, 0.10, 0.0].map((lift, i) => {
+    const f = figure({ lift, footFwd: 0.05 + Math.min(0.5, i * 0.12) });
+    f[LM.R_ANKLE] = { ...f[LM.R_ANKLE], visibility: 0.8 };
+    return f;
+  });
+  const { events } = run(s, frames, t);
+  const hits = events.filter((e) => e.type === 'oppHit');
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0].dmg, CONFIG.kickDmg);
+});
+
+test('second wind: the first KO blow revives you at 30% once, the second one ends the round', () => {
+  const { s, t } = ready('STRIKE');
+  s.player.hp = 5;
+  const { events, t: t1 } = run(s, rep(figure(), 3), t);
+  assert.equal(count(events, 'revive'), 1);
+  assert.equal(count(events, 'ko'), 0);
+  assert.equal(s.player.hp, Math.round(CONFIG.maxHp * CONFIG.reviveFrac));
+  assert.equal(s.opp.state, 'HOPBACK');
+  s.player.hp = 5; s.opp.dist = CONFIG.attackDist; s.opp.state = 'STRIKE'; s.opp.stateT = 0; s.opp.struck = false; s.player.hitstunUntil = 0;
+  const { events: ev2 } = run(s, rep(figure(), 3), t1 + 2000);
+  assert.equal(count(ev2, 'revive'), 0);
+  assert.equal(count(ev2, 'ko'), 1);
+  assert.equal(s.winner, 'RYU');
+});

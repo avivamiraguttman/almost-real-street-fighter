@@ -53,6 +53,14 @@ export function drawHUD(ctx, W, Hc, state, cfg) {
   const centerMsg = state.phase === 'calibrate' ? 'CALIBRATION' : state.noBody ? 'STEP INTO FRAME' : state.phase === 'ready' ? 'READY' : state.phase === 'ko' ? '' : 'FIGHT';
   if (centerMsg) { ctx.strokeText(centerMsg, W / 2, y + 18); ctx.fillText(centerMsg, W / 2, y + 18); }
   if (state.phase === 'ko') drawEndScreen(ctx, W, Hc, state);
+  if (p.reviveAt != null && state.t - p.reviveAt < 1800 && state.phase === 'fighting') { // second wind banner
+    const a = state.t - p.reviveAt; ctx.save();
+    ctx.globalAlpha = Math.min(1, 0.35 * (1 - a / 1800) * 3); ctx.fillStyle = '#ffd400'; if (a < 250) ctx.fillRect(0, 0, W, Hc);
+    ctx.globalAlpha = 1; ctx.font = 'bold 72px "Courier New", monospace'; ctx.lineWidth = 8; ctx.strokeStyle = '#000'; ctx.fillStyle = '#ffd400';
+    ctx.strokeText('SECOND WIND!', W / 2, 200); ctx.fillText('SECOND WIND!', W / 2, 200);
+    ctx.font = 'bold 28px "Courier New", monospace'; ctx.lineWidth = 5; ctx.fillStyle = '#fff';
+    ctx.strokeText('get up and fight', W / 2, 245); ctx.fillText('get up and fight', W / 2, 245); ctx.restore();
+  }
   if (p.tooFarBack && state.phase === 'fighting') {
     ctx.font = 'bold 56px "Courier New", monospace'; ctx.lineWidth = 6; ctx.strokeStyle = '#000'; ctx.fillStyle = '#7cf';
     ctx.strokeText('STEP FORWARD', W / 2, 160); ctx.fillText('STEP FORWARD', W / 2, 160);

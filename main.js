@@ -62,7 +62,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 // tuning sliders bound straight into CONFIG (state.cfg is the same object)
-const sliders = [['punchSpeed', 0.3, 4, 0.1], ['punchExt', 0.1, 0.6, 0.01], ['kickSpeed', 0.3, 4, 0.1], ['attackDist', 0.3, 1.2, 0.01], ['windupMs', 150, 1200, 10], ['approachSpeed', 0.2, 2, 0.05], ['visMin', 0.1, 0.95, 0.05], ['wristVisMin', 0.1, 0.95, 0.05], ['punchRearm', 0.05, 0.4, 0.01], ['oppScale', 0.8, 1.6, 0.05], ['oppReach', 0.4, 1.0, 0.05], ['oppDmg', 5, 30, 1], ['oppSlim', 0.7, 1.1, 0.02], ['knockback', 0.2, 1.2, 0.05], ['hopback', 0.1, 1.0, 0.05]];
+const sliders = [['punchSpeed', 0.3, 4, 0.1], ['punchExt', 0.1, 0.6, 0.01], ['kickSpeed', 0.3, 4, 0.1], ['attackDist', 0.3, 1.2, 0.01], ['windupMs', 150, 1200, 10], ['approachSpeed', 0.2, 2, 0.05], ['visMin', 0.1, 0.95, 0.05], ['wristVisMin', 0.1, 0.95, 0.05], ['punchRearm', 0.05, 0.4, 0.01], ['oppScale', 0.8, 1.6, 0.05], ['oppReach', 0.4, 1.0, 0.05], ['oppDmg', 5, 30, 1], ['oppSlim', 0.7, 1.1, 0.02], ['knockback', 0.2, 1.2, 0.05], ['hopback', 0.1, 1.0, 0.05], ['reviveFrac', 0, 0.6, 0.05], ['kickLift', 0.1, 0.5, 0.02]];
 const panel = document.getElementById('panel');
 for (const [k, min, max, st] of sliders) {
   const row = document.createElement('label'); row.innerHTML = `<span>${k}</span><input type=range min=${min} max=${max} step=${st} value=${CONFIG[k]}><b>${CONFIG[k]}</b>`;
@@ -116,6 +116,7 @@ function loop() {
     if (e.type === 'ko') { play('ko'); music.pause(); setTimeout(saveRec, 300); }
     if (e.type === 'thumbsUp') beginFight();
     if (e.type === 'stepBack') play('block');
+    if (e.type === 'revive') { play('fight'); jolt = { t0: now, dir: -state.player.facing }; }
     if (e.type === 'block') { play('block'); } if (e.type === 'block') effects.push({ type: 'popup', t0: now, x: e.x, y: e.y - 30, text: 'BLOCK', color: '#7cf' });
   }
   effects = pruneEffects(effects, now);
