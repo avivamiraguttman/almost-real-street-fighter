@@ -1,6 +1,6 @@
 import { PoseLandmarker, FilesetResolver } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
 import { createGame, step, startFight, recalibrate, CONFIG } from './combat.js';
-import { loadSprites, drawOpponent, drawHUD, drawEffects, pruneEffects, drawDebug, drawCalibration, drawReady } from './render.js';
+import { loadSprites, drawOpponent, drawHUD, drawEffects, pruneEffects, drawDebug, drawCalibration, drawReady, drawTitleScreen } from './render.js';
 
 const video = document.getElementById('cam');
 const canvas = document.getElementById('game');
@@ -9,6 +9,7 @@ const status = document.getElementById('status');
 const say = (m) => { status.textContent = m; status.style.display = m ? 'block' : 'none'; };
 
 let state = createGame(CONFIG);
+let onTitle = true; // attract screen until the first SPACE
 let debug = false, effects = [], jolt = { t0: -1e9, dir: 0 }, sprites = null, landmarker = null, lastVideoT = -1, lmsPx = null;
 const frame = { W: 1280, Hc: 720, luma: null, fps: null };
 const lumaCanvas = document.createElement('canvas'); lumaCanvas.width = 32; lumaCanvas.height = 18;
@@ -54,7 +55,7 @@ function beginFight() {
   music.currentTime = 0; music.play().catch(() => {});
 }
 document.addEventListener('keydown', (e) => {
-  if (e.code === 'Space') { e.preventDefault(); if (state.phase === 'ready' || state.phase === 'ko') beginFight(); }
+  if (e.code === 'Space') { e.preventDefault(); if (onTitle) { onTitle = false; return; } if (state.phase === 'ready' || state.phase === 'ko') beginFight(); }
   if (e.key === 'r' || e.key === 'R') { if (state.lock) { state.phase = 'ready'; effects = []; music.pause(); } else { state = createGame(CONFIG); } }
   if (e.key === 'c' || e.key === 'C') { recalibrate(state); effects = []; music.pause(); }
   if (e.key === 'd' || e.key === 'D') { debug = !debug; document.getElementById('panel').style.display = debug ? 'block' : 'none'; }
@@ -128,6 +129,7 @@ function loop() {
   ctx.drawImage(video, jx, 0, W, Hc);
   ctx.filter = 'none';
 
+  if (onTitle) { drawTitleScreen(ctx, W, Hc, now); requestAnimationFrame(loop); return; }
   if (state.player.geom && state.boxes && state.phase !== 'calibrate') drawOpponent(ctx, sprites, state.opp, state.boxes, state.player.facing, state.player.H * (CONFIG.oppScale || 1), now, state.winner);
   drawEffects(ctx, W, Hc, effects, now);
   drawHUD(ctx, W, state, CONFIG);

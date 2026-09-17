@@ -114,23 +114,49 @@ export function drawCalibration(ctx, W, Hc, state, lmsPx) {
   const c = state.calib;
   ctx.save();
   if (lmsPx && state.player.geom) drawSkeleton(ctx, lmsPx, '#0f0');
-  const x = 30, y0 = 110, lh = 34;
+  const x = 30, y0 = 120, lh = 46;
   const checks = c.checks && c.checks.length ? c.checks : [{ ok: false, msg: 'Step into frame: whole body visible' }];
-  ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(x - 14, y0 - 40, 620, checks.length * lh + 110);
-  ctx.font = 'bold 22px "Courier New", monospace'; ctx.textAlign = 'left'; ctx.fillStyle = '#ffd400';
+  ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(x - 14, y0 - 50, 860, checks.length * lh + 130);
+  ctx.font = 'bold 30px "Courier New", monospace'; ctx.textAlign = 'left'; ctx.fillStyle = '#ffd400';
   ctx.fillText('Stand side-on in fighting stance. Hold still.', x, y0 - 12);
   drawTitle(ctx, W);
-  ctx.font = '20px "Courier New", monospace';
+  ctx.font = 'bold 28px "Courier New", monospace';
   checks.forEach((k, i) => {
     ctx.fillStyle = k.ok ? '#3ddc5a' : '#ff5a5a';
     ctx.fillText((k.ok ? '\u2714 ' : '\u2716 ') + k.msg, x, y0 + 20 + i * lh);
   });
   const allOk = checks.every((k) => k.ok);
   const py = y0 + 30 + checks.length * lh;
-  ctx.fillStyle = '#333'; ctx.fillRect(x, py, 560, 18);
-  ctx.fillStyle = allOk ? '#3ddc5a' : '#666'; ctx.fillRect(x, py, 560 * (allOk ? (c.progress || 0) : 0), 18);
-  ctx.fillStyle = '#ccc'; ctx.font = '16px "Courier New", monospace';
-  ctx.fillText(allOk ? 'Locking scale...' : 'Fix the red items above', x, py + 38);
+  ctx.fillStyle = '#333'; ctx.fillRect(x, py, 800, 22);
+  ctx.fillStyle = allOk ? '#3ddc5a' : '#666'; ctx.fillRect(x, py, 800 * (allOk ? (c.progress || 0) : 0), 22);
+  ctx.fillStyle = '#ddd'; ctx.font = '22px "Courier New", monospace';
+  ctx.fillText(allOk ? 'Locking scale...' : 'Fix the red items above', x, py + 48);
+  ctx.restore();
+}
+
+// Attract screen: big centred title, press SPACE to go to calibration.
+export function drawTitleScreen(ctx, W, Hc, wallT) {
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(0, 0, W, Hc);
+  const pulse = 1 + 0.03 * Math.sin(wallT / 260);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.save(); ctx.translate(W / 2, Hc * 0.36); ctx.scale(pulse, pulse);
+  ctx.font = 'bold 64px "Courier New", monospace'; ctx.lineWidth = 12; ctx.strokeStyle = '#000'; ctx.lineJoin = 'round';
+  ctx.strokeText('ALMOST REAL', 0, -70);
+  ctx.fillStyle = '#ffd400'; ctx.fillText('ALMOST REAL', 0, -70);
+  ctx.font = 'bold 128px "Courier New", monospace'; ctx.lineWidth = 16;
+  ctx.shadowColor = 'rgba(255,60,60,0.9)'; ctx.shadowBlur = 30 + 12 * Math.sin(wallT / 200);
+  ctx.strokeText('STREET FIGHTER', 0, 40);
+  ctx.shadowBlur = 0;
+  const g = ctx.createLinearGradient(0, -20, 0, 100); g.addColorStop(0, '#ff6b6b'); g.addColorStop(0.5, '#ff1f1f'); g.addColorStop(1, '#8f0000');
+  ctx.fillStyle = g; ctx.fillText('STREET FIGHTER', 0, 40);
+  ctx.restore();
+  ctx.font = 'bold 30px "Courier New", monospace'; ctx.lineWidth = 6; ctx.strokeStyle = '#000'; ctx.fillStyle = '#fff';
+  ctx.strokeText('You vs. Ryu. Your real punches. His real sprites.', W / 2, Hc * 0.62); ctx.fillText('You vs. Ryu. Your real punches. His real sprites.', W / 2, Hc * 0.62);
+  if (Math.floor(wallT / 500) % 2 === 0) {
+    ctx.font = 'bold 40px "Courier New", monospace'; ctx.lineWidth = 8; ctx.fillStyle = '#ffd400';
+    ctx.strokeText('PRESS SPACE TO START', W / 2, Hc * 0.76); ctx.fillText('PRESS SPACE TO START', W / 2, Hc * 0.76);
+  }
   ctx.restore();
 }
 
