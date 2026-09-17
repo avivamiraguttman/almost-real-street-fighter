@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, step, CONFIG, LM } from '../combat.js';
+import { createGame, step, startFight, recalibrate, calibrationChecks, CONFIG, LM } from '../combat.js';
 
 const H = 400, FLOOR = 600, HIP = 300;
 // Standing side-profile figure facing +x. Overrides are in H units relative to shoulder / floor.
@@ -19,15 +19,19 @@ function figure({ ext = 0.1, wristY = -0.75, lift = 0, footFwd = 0.05, blockHand
   return lms;
 }
 
+const FRAME = { W: 1280, Hc: 720, luma: 120, fps: 30 };
 function run(state, frames, t0) {
   const events = []; let t = t0;
-  for (const lms of frames) { t += 16; events.push(...step(state, lms, t)); }
+  for (const lms of frames) { t += 16; events.push(...step(state, lms, t, undefined, FRAME)); }
   return { events, t };
 }
 const rep = (lms, n) => Array.from({ length: n }, () => lms);
 function ready(oppState = 'IDLE') {
   const s = createGame(CONFIG);
-  let { t } = run(s, rep(figure(), 130), 0); // 2.08 s calibration
+  let { t } = run(s, rep(figure(), 130), 0); // 2.08 s standing still
+  assert.equal(s.phase, 'ready');
+  assert.equal(s.lock.H, H);
+  assert.ok(startFight(s));
   assert.equal(s.phase, 'fighting');
   s.opp.dist = CONFIG.attackDist; s.opp.state = oppState; s.opp.stateT = 0;
   return { s, t };
@@ -110,4 +114,83 @@ test('no body: step returns no events and flags noBody', () => {
   const ev = step(s, null, 16);
   assert.deepEqual(ev, []);
   assert.equal(s.noBody, true);
+});
+
+test('calibration flags a body that is too small and one with no room for Ryu', () => {
+  const s = createGame(CONFIG);
+  const small = figure().map((p) => ({ x: 300 + (p.x - 300) * 0.4, y: 600 - (600 - p.y) * 0.4, visibility: p.visibility })); // H = 160 px = 22% of 720
+  run(s, rep(small, 40), 0);
+  assert.equal(s.phase, 'calibrate');
+  const dist = s.calib.checks.find((c) => c.name === 'distance');
+  assert.equal(dist.ok, false); assert.match(dist.msg, /Come closer/);
+
+  const s2 = createGame(CONFIG);
+  const cramped = figure().map((p) => ({ ...p, x: p.x + 800 })); // hips at x=1100, facing right, 180 px of room
+  run(s2, rep(cramped, 40), 0);
+  const room = s2.calib.checks.find((c) => c.name === 'room');
+  assert.equal(room.ok, false); assert.match(room.msg, /Move left/);
+  assert.equal(s2.phase, 'calibrate');
+});
+
+test('calibration flags bad lighting and never locks while a check fails', () => {
+  const s = createGame(CONFIG);
+  let t = 0;
+  for (let i = 0; i < 200; i++) { t += 16; step(s, figure(), t, undefined, { ...FRAME, luma: 20 }); }
+  assert.equal(s.phase, 'calibrate');
+  assert.equal(s.calib.checks.find((c) => c.name === 'light').ok, false);
+});
+
+test('locked scale: Ryu height does not follow a jittering nose', () => {
+  const { s, t } = ready();
+  const before = s.player.H;
+  const wobble = figure(); wobble[LM.NOSE] = { ...wobble[LM.NOSE], y: wobble[LM.NOSE].y + 60 };
+  run(s, rep(wobble, 10), t);
+  assert.equal(s.player.H, before);
+});
+
+test('a landed hit knocks Ryu out of punching range', () => {
+  const { s, t } = ready();
+  let { t: t1 } = run(s, punchFrames(), t);
+  assert.equal(s.opp.state, 'HURT');
+  for (let i = 0; i < 60 && s.opp.state === 'HURT'; i++) { t1 += 16; step(s, figure(), t1, undefined, FRAME); }
+  assert.equal(s.opp.state, 'APPROACH'); // re-engages instead of idling
+  assert.ok(s.opp.dist >= CONFIG.attackDist + CONFIG.knockback * 0.9, `dist ${s.opp.dist}`);
+});
+
+test('recalibrate drops the lock and returns to the calibrate phase', () => {
+  const { s } = ready();
+  recalibrate(s);
+  assert.equal(s.phase, 'calibrate'); assert.equal(s.lock, null);
+});
+
+test('walking toward Ryu past the home zone disables strikes and fires stepBack', () => {
+  const { s, t } = ready();
+  const forward = punchFrames().map((f) => f.map((p) => ({ ...p, x: p.x + 0.5 * H }))); // whole body 0.5 H forward
+  const { events } = run(s, forward, t);
+  assert.equal(count(events, 'stepBack'), 1);
+  assert.equal(count(events, 'oppHit'), 0);
+  assert.equal(s.player.outOfZone, true);
+  // back home: strikes work again
+  const { events: ev2 } = run(s, punchFrames(), t + 400);
+  assert.equal(s.player.outOfZone, false);
+  assert.equal(count(ev2, 'oppHit'), 1);
+});
+
+test('Ryu is anchored to the room: player stepping forward closes the gap, Ryu does not slide', () => {
+  const { s, t } = ready();
+  const cxBefore = s.boxes ? s.boxes.cx : null;
+  run(s, rep(figure(), 1), t);
+  const cx0 = s.boxes.cx;
+  const fwd = figure().map((p) => ({ ...p, x: p.x + 0.2 * H }));
+  run(s, rep(fwd, 1), t + 16);
+  assert.equal(Math.round(s.boxes.cx), Math.round(cx0));
+  assert.ok(Math.abs(s.player.offset - 0.2) < 0.01);
+});
+
+test('knockback is clamped at the screen edge', () => {
+  const { s, t } = ready();
+  s.opp.dist = 2.2; // hips at 300, W 1280: max dist = 980/400 - 0.2 = 2.25
+  s.opp.state = 'HURT'; s.opp.stateT = 0;
+  run(s, rep(figure(), 30), t);
+  assert.ok(s.opp.dist <= 2.25 + 1e-9, `dist ${s.opp.dist}`);
 });

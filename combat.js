@@ -19,14 +19,18 @@ export const CONFIG = {
   // opponent
   startDist: 1.5, approachSpeed: 0.6, attackDist: 0.55,
   oppW: 0.30, oppH: 1.10, oppReach: 0.50, oppFist: 0.12, oppDmg: 10,
-  knockback: 0.25, hopback: 0.30,
-  idleMs: 400, windupMs: 500, strikeMs: 150, recoverMs: 400, hopbackMs: 300, hurtMs: 300,
+  knockback: 0.60, hopback: 0.30,
+  zoneFwd: 0.35, edgeMargin: 0.2, // player may advance 0.35 H past the calibrated spot; Ryu stays 0.2 H inside the screen edge
+  idleMs: 400, windupMs: 500, strikeMs: 150, recoverMs: 400, hopbackMs: 300, hurtMs: 350,
+  // calibration
+  calibHoldMs: 1500, sizeMin: 0.30, sizeMax: 0.80, roomForOpp: 1.3, lumaMin: 50, lumaMax: 210, jitterMax: 0.03, fpsMin: 15,
   maxHp: 100,
 };
 
 export function createGame(cfg = CONFIG) {
   return {
-    cfg, phase: 'calibrating', t: null, calib: { t0: null, facingVotes: 0, frames: 0 },
+    cfg, phase: 'calibrate', t: null, lock: null,
+    calib: { okSince: null, noseHist: [], hHist: [], floorHist: [], checks: [] },
     noBody: true,
     player: {
       hp: cfg.maxHp, hitstunUntil: 0, cooldownUntil: 0,
@@ -46,22 +50,26 @@ const pick = (lms, i, j, cfg) => {
 };
 
 // Geometry of the player in pixels, plus H. Returns null when the body is not usable.
-export function playerGeometry(lms, cfg, prevH) {
+export function playerGeometry(lms, cfg, lock) {
   if (!lms || lms.length < 29) return null;
   const nose = lms[LM.NOSE];
   const hipMid = pick(lms, LM.L_HIP, LM.R_HIP, cfg);
   const shoulderMid = pick(lms, LM.L_SHOULDER, LM.R_SHOULDER, cfg);
   const ankles = [lms[LM.L_ANKLE], lms[LM.R_ANKLE]].filter((a) => vis(a, cfg));
   if (!vis(nose, cfg) || !hipMid || !shoulderMid || ankles.length === 0) return null;
-  const floorY = Math.max(...ankles.map((a) => a.y));
-  let H = floorY - nose.y;
-  if (H < 40) return null;
-  if (prevH) H = prevH * 0.8 + H * 0.2; // smooth
+  const floorMeasured = Math.max(...ankles.map((a) => a.y));
+  const Hmeasured = floorMeasured - nose.y;
+  if (Hmeasured < 40) return null;
+  let H = Hmeasured, floorY = floorMeasured;
+  if (lock) { // frozen scale: Ryu must not resize with tracking jitter
+    lock.floorY = lock.floorY * 0.98 + floorMeasured * 0.02;
+    H = lock.H; floorY = lock.floorY;
+  }
   const facingRaw = Math.sign(nose.x - hipMid.x) || 1;
   const torsoCx = (hipMid.x + shoulderMid.x) / 2;
   const torsoW = Math.max(cfg.torsoMinW * H, Math.abs(hipMid.x - shoulderMid.x));
   return {
-    nose, hipMid, shoulderMid, floorY, H, facingRaw,
+    nose, hipMid, shoulderMid, floorY, H, Hmeasured, floorMeasured, facingRaw,
     head: { x: nose.x, y: nose.y, r: cfg.headR * H },
     torso: { x: torsoCx - torsoW / 2, y: shoulderMid.y, w: torsoW, h: hipMid.y - shoulderMid.y },
     wrists: [LM.L_WRIST, LM.R_WRIST].filter((i) => vis(lms[i], cfg)).map((i) => ({ id: i, x: lms[i].x, y: lms[i].y, r: cfg.fistR * H })),
@@ -70,9 +78,9 @@ export function playerGeometry(lms, cfg, prevH) {
 }
 
 // Opponent boxes in pixels, derived from player geometry.
-export function opponentBoxes(g, opp, facing, cfg) {
+export function opponentBoxes(g, opp, facing, cfg, homeX) {
   const H = g.H;
-  const cx = g.hipMid.x + facing * opp.dist * H;
+  const cx = (homeX ?? g.hipMid.x) + facing * opp.dist * H;
   const hurt = { x: cx - cfg.oppW * H / 2, y: g.floorY - cfg.oppH * H, w: cfg.oppW * H, h: cfg.oppH * H };
   const fx = cx - facing * cfg.oppReach * H;
   const fist = { x: fx - cfg.oppFist * H / 2, y: g.nose.y - cfg.oppFist * H / 2, w: cfg.oppFist * H, h: cfg.oppFist * H };
@@ -87,37 +95,48 @@ const circleRect = (c, r) => {
 const rectRect = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
 // Advance the game by one frame. Returns a list of events for rendering/sound.
-export function step(state, lms, now, cfgOverride) {
+export function step(state, lms, now, cfgOverride, frame) {
   const cfg = cfgOverride || state.cfg;
   const events = [];
   const dt = state.t == null ? 16 : Math.min(100, Math.max(1, now - state.t));
   state.t = now;
   const p = state.player, o = state.opp;
 
-  const g = playerGeometry(lms, cfg, p.H);
+  const g = playerGeometry(lms, cfg, state.lock);
   state.noBody = !g;
-  if (!g) { p.prev = null; return events; }
+  if (!g) { p.prev = null; if (state.phase === 'calibrate') { state.calib.okSince = null; state.calib.checks = [{ name: 'body', ok: false, msg: 'Step into frame: whole body visible' }]; } return events; }
   p.H = g.H; p.floorY = g.floorY; p.geom = g;
 
-  if (state.phase === 'calibrating') {
-    if (state.calib.t0 == null) state.calib.t0 = now;
-    state.calib.facingVotes += g.facingRaw; state.calib.frames++;
-    p.facing = Math.sign(state.calib.facingVotes) || 1;
-    if (now - state.calib.t0 >= cfg.calibMs) { state.phase = 'fighting'; events.push({ type: 'fight' }); }
+  if (state.phase === 'calibrate') {
+    runCalibration(state, g, lms, now, frame || {}, cfg, events);
     p.prev = snapshot(g);
     return events;
   }
-  if (state.phase !== 'fighting') { p.prev = snapshot(g); return events; }
+  if (state.phase !== 'fighting') {
+    p.facing = state.lock ? state.lock.facing : g.facingRaw;
+    state.boxes = opponentBoxes(g, o, p.facing, cfg, state.lock && state.lock.homeX);
+    p.prev = snapshot(g); return events;
+  }
 
   const f = p.facing, H = g.H;
-  const boxes = opponentBoxes(g, o, f, cfg);
+  const homeX = state.lock ? state.lock.homeX : g.hipMid.x;
+  const W = (frame && frame.W) || 1280;
+  const maxDist = (f === 1 ? (W - homeX) / H : homeX / H) - cfg.edgeMargin;
+  o.dist = Math.min(o.dist, maxDist);
+  const boxes = opponentBoxes(g, o, f, cfg, homeX);
   state.boxes = boxes;
+  // home zone: how far the player has advanced from the calibrated spot, in H
+  p.offset = (f * (g.hipMid.x - homeX)) / H;
+  const wasOut = p.outOfZone;
+  p.outOfZone = p.offset > cfg.zoneFwd;
+  if (p.outOfZone && !wasOut) events.push({ type: 'stepBack' });
+  const gap = o.dist - p.offset; // actual distance between the two fighters
 
   // --- block ---
   p.blocking = g.wrists.some((w) => Math.hypot(w.x - g.nose.x, w.y - g.nose.y) <= cfg.blockDist * H);
 
   // --- player strikes ---
-  const canStrike = now >= p.cooldownUntil && now >= p.hitstunUntil && o.state !== 'KO';
+  const canStrike = now >= p.cooldownUntil && now >= p.hitstunUntil && o.state !== 'KO' && !p.outOfZone;
   const prev = p.prev;
   p.debug = { ext: {}, vx: {} };
   for (const w of g.wrists) {
@@ -150,10 +169,10 @@ export function step(state, lms, now, cfgOverride) {
   if (o.state !== 'KO') {
     o.stateT += dt;
     switch (o.state) {
-      case 'IDLE': if (o.stateT >= cfg.idleMs) setOpp(o, o.dist > cfg.attackDist ? 'APPROACH' : 'WINDUP'); break;
+      case 'IDLE': if (o.stateT >= cfg.idleMs) setOpp(o, gap > cfg.attackDist ? 'APPROACH' : 'WINDUP'); break;
       case 'APPROACH':
-        o.dist = Math.max(cfg.attackDist, o.dist - cfg.approachSpeed * dt / 1000);
-        if (o.dist <= cfg.attackDist) setOpp(o, 'WINDUP');
+        o.dist = Math.max(p.offset + cfg.attackDist, o.dist - cfg.approachSpeed * dt / 1000);
+        if (o.dist - p.offset <= cfg.attackDist + 1e-9) setOpp(o, 'WINDUP');
         break;
       case 'WINDUP': if (o.stateT >= cfg.windupMs) { setOpp(o, 'STRIKE'); o.struck = false; o.landed = false; } break;
       case 'STRIKE':
@@ -175,12 +194,12 @@ export function step(state, lms, now, cfgOverride) {
         break;
       case 'RECOVER': if (o.stateT >= cfg.recoverMs) setOpp(o, o.landed ? 'HOPBACK' : 'IDLE'); break;
       case 'HOPBACK':
-        o.dist += cfg.hopback * dt / cfg.hopbackMs;
+        o.dist = Math.min(maxDist, o.dist + cfg.hopback * dt / cfg.hopbackMs);
         if (o.stateT >= cfg.hopbackMs) setOpp(o, 'IDLE');
         break;
       case 'HURT':
-        o.dist += cfg.knockback * dt / cfg.hurtMs;
-        if (o.stateT >= cfg.hurtMs) setOpp(o, 'IDLE');
+        o.dist = Math.min(maxDist, o.dist + cfg.knockback * dt / cfg.hurtMs);
+        if (o.stateT >= cfg.hurtMs) setOpp(o, 'APPROACH');
         break;
     }
   }
@@ -202,4 +221,66 @@ function snapshot(g) {
   const wrists = {};
   for (const w of g.wrists) wrists[w.id] = { x: w.x, y: w.y };
   return { wrists, ankle: g.ankle ? { x: g.ankle.x, y: g.ankle.y } : null };
+}
+
+const median = (a) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : null; };
+
+// Runs every frame while phase === 'calibrate'. Fills state.calib.checks; locks scale and
+// moves to 'ready' once every check has been green for cfg.calibHoldMs.
+export function runCalibration(state, g, lms, now, frame, cfg, events) {
+  const c = state.calib, W = frame.W || 1280, Hc = frame.Hc || 720;
+  c.noseHist.push({ x: g.nose.x, y: g.nose.y }); if (c.noseHist.length > 30) c.noseHist.shift();
+  c.hHist.push(g.Hmeasured); if (c.hHist.length > 30) c.hHist.shift();
+  c.floorHist.push(g.floorMeasured); if (c.floorHist.length > 30) c.floorHist.shift();
+  const checks = calibrationChecks(g, lms, W, Hc, frame, c.noseHist, cfg);
+  c.checks = checks;
+  const allOk = checks.every((k) => k.ok);
+  if (!allOk) { c.okSince = null; return; }
+  if (c.okSince == null) c.okSince = now;
+  c.progress = Math.min(1, (now - c.okSince) / cfg.calibHoldMs);
+  if (now - c.okSince >= cfg.calibHoldMs) {
+    state.lock = { H: median(c.hHist), floorY: median(c.floorHist), facing: g.facingRaw, homeX: g.hipMid.x };
+    state.player.facing = g.facingRaw;
+    state.phase = 'ready';
+    events.push({ type: 'ready' });
+  }
+}
+
+export function calibrationChecks(g, lms, W, Hc, frame, noseHist, cfg) {
+  const H = g.Hmeasured, checks = [];
+  const need = [LM.NOSE, LM.L_ANKLE, LM.R_ANKLE];
+  const bodyOk = need.every((i) => vis(lms[i], cfg)) && (vis(lms[LM.L_SHOULDER], cfg) || vis(lms[LM.R_SHOULDER], cfg)) && (vis(lms[LM.L_WRIST], cfg) || vis(lms[LM.R_WRIST], cfg));
+  checks.push({ name: 'body', ok: bodyOk, msg: bodyOk ? 'Whole body tracked' : 'Whole body must be visible: head, hands, both feet' });
+  const size = H / Hc;
+  checks.push({ name: 'distance', ok: size >= cfg.sizeMin && size <= cfg.sizeMax, msg: size < cfg.sizeMin ? `Come closer (body ${Math.round(size * 100)}% of frame)` : size > cfg.sizeMax ? `Step back (body ${Math.round(size * 100)}% of frame)` : `Distance ok (body ${Math.round(size * 100)}% of frame)` });
+  const headIn = g.nose.y > 0.04 * Hc, feetIn = g.floorMeasured < 0.98 * Hc;
+  checks.push({ name: 'framing', ok: headIn && feetIn, msg: !headIn ? 'Head cut off: tilt camera up or step back' : !feetIn ? 'Feet cut off: tilt camera down or step back' : 'Head and feet in frame' });
+  const profile = Math.abs(g.nose.x - g.hipMid.x) / H;
+  const facing = g.facingRaw, side = facing === 1 ? 'right' : 'left';
+  checks.push({ name: 'profile', ok: profile > 0.04, msg: profile > 0.04 ? `Side profile ok, facing ${side}` : 'Turn side-on to the camera' });
+  const room = (facing === 1 ? W - g.hipMid.x : g.hipMid.x) / H;
+  checks.push({ name: 'room', ok: room >= cfg.roomForOpp, msg: room >= cfg.roomForOpp ? `Room for Ryu on your ${side}` : `Move ${facing === 1 ? 'left' : 'right'}: Ryu needs space on your ${side}` });
+  if (frame.luma != null) checks.push({ name: 'light', ok: frame.luma >= cfg.lumaMin && frame.luma <= cfg.lumaMax, msg: frame.luma < cfg.lumaMin ? `Too dark (${Math.round(frame.luma)})` : frame.luma > cfg.lumaMax ? `Too bright (${Math.round(frame.luma)})` : `Lighting ok (${Math.round(frame.luma)})` });
+  if (noseHist.length >= 20) {
+    const mx = noseHist.reduce((s, p) => s + p.x, 0) / noseHist.length, my = noseHist.reduce((s, p) => s + p.y, 0) / noseHist.length;
+    const jitter = Math.sqrt(noseHist.reduce((s, p) => s + (p.x - mx) ** 2 + (p.y - my) ** 2, 0) / noseHist.length) / H;
+    checks.push({ name: 'steady', ok: jitter <= cfg.jitterMax, msg: jitter <= cfg.jitterMax ? `Tracking steady (${jitter.toFixed(3)})` : `Tracking jittery (${jitter.toFixed(3)}): stand still, more light, plainer background` });
+  } else checks.push({ name: 'steady', ok: false, msg: 'Measuring steadiness...' });
+  if (frame.fps != null) checks.push({ name: 'fps', ok: frame.fps >= cfg.fpsMin, msg: frame.fps >= cfg.fpsMin ? `${Math.round(frame.fps)} fps` : `Low frame rate (${Math.round(frame.fps)} fps): close other tabs` });
+  return checks;
+}
+
+// New round using the existing lock. Requires phase 'ready' or 'ko'.
+export function startFight(state) {
+  if (!state.lock) return false;
+  const cfg = state.cfg;
+  state.player.hp = cfg.maxHp; state.player.hitstunUntil = 0; state.player.cooldownUntil = 0;
+  state.opp = { hp: cfg.maxHp, dist: cfg.startDist, state: 'IDLE', stateT: 0, landed: false, struck: false, hitstunUntil: 0 };
+  state.winner = null; state.phase = 'fighting';
+  return true;
+}
+
+export function recalibrate(state) {
+  state.lock = null; state.phase = 'calibrate';
+  state.calib = { okSince: null, noseHist: [], hHist: [], floorHist: [], checks: [] };
 }

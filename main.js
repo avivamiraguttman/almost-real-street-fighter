@@ -1,6 +1,6 @@
 import { PoseLandmarker, FilesetResolver } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
-import { createGame, step, CONFIG } from './combat.js';
-import { loadSprites, drawOpponent, drawHUD, drawEffects, pruneEffects, drawDebug } from './render.js';
+import { createGame, step, startFight, recalibrate, CONFIG } from './combat.js';
+import { loadSprites, drawOpponent, drawHUD, drawEffects, pruneEffects, drawDebug, drawCalibration, drawReady } from './render.js';
 
 const video = document.getElementById('cam');
 const canvas = document.getElementById('game');
@@ -10,9 +10,26 @@ const say = (m) => { status.textContent = m; status.style.display = m ? 'block' 
 
 let state = createGame(CONFIG);
 let debug = false, effects = [], jolt = { t0: -1e9, dir: 0 }, sprites = null, landmarker = null, lastVideoT = -1, lmsPx = null;
+const frame = { W: 1280, Hc: 720, luma: null, fps: null };
+const lumaCanvas = document.createElement('canvas'); lumaCanvas.width = 32; lumaCanvas.height = 18;
+const lumaCtx = lumaCanvas.getContext('2d', { willReadFrequently: true });
+let fpsT = performance.now(), fpsN = 0;
 
+// --- audio: files are optional, missing ones are silently skipped ---
+const SFX = {};
+for (const n of ['punch', 'kick', 'hit', 'block', 'ko', 'fight']) { const a = new Audio(`assets/audio/${n}.mp3`); a.preload = 'auto'; a.onerror = () => { SFX[n] = null; }; SFX[n] = a; }
+const music = new Audio('assets/audio/music.mp3'); music.loop = true; music.volume = 0.35; music.onerror = () => {};
+const play = (n) => { const a = SFX[n]; if (!a) return; try { const c = a.cloneNode(); c.volume = 0.9; c.play().catch(() => {}); } catch (e) {} };
+
+function beginFight() {
+  if (!startFight(state)) return;
+  effects = []; play('fight');
+  music.currentTime = 0; music.play().catch(() => {});
+}
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'r' || e.key === 'R') { state = createGame(CONFIG); effects = []; }
+  if (e.code === 'Space') { e.preventDefault(); if (state.phase === 'ready' || state.phase === 'ko') beginFight(); }
+  if (e.key === 'r' || e.key === 'R') { if (state.lock) { state.phase = 'ready'; effects = []; music.pause(); } else { state = createGame(CONFIG); } }
+  if (e.key === 'c' || e.key === 'C') { recalibrate(state); effects = []; music.pause(); }
   if (e.key === 'd' || e.key === 'D') { debug = !debug; document.getElementById('panel').style.display = debug ? 'block' : 'none'; }
 });
 
@@ -40,6 +57,7 @@ async function init() {
     await new Promise((r) => (video.onloadedmetadata = r));
     await video.play();
     canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+    frame.W = canvas.width; frame.Hc = canvas.height;
     say('');
     requestAnimationFrame(loop);
   } catch (e) {
@@ -56,12 +74,20 @@ function loop() {
     const res = landmarker.detectForVideo(video, now);
     const lm = res.landmarks && res.landmarks[0];
     lmsPx = lm ? lm.map((p) => ({ x: p.x * W, y: p.y * Hc, visibility: p.visibility })) : null;
+    fpsN++; if (now - fpsT >= 1000) { frame.fps = (fpsN * 1000) / (now - fpsT); fpsN = 0; fpsT = now; }
+    if (state.phase === 'calibrate' && (fpsN % 5) === 0) { // mean luma of a 32x18 downscale
+      lumaCtx.drawImage(video, 0, 0, 32, 18); const d = lumaCtx.getImageData(0, 0, 32, 18).data; let s = 0;
+      for (let i = 0; i < d.length; i += 4) s += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      frame.luma = s / (d.length / 4);
+    }
   }
-  const events = step(state, lmsPx, now);
+  const events = step(state, lmsPx, now, undefined, frame);
   for (const e of events) {
-    if (e.type === 'oppHit') { effects.push({ type: 'spark', t0: now, x: e.x, y: e.y }, { type: 'popup', t0: now, x: e.x, y: e.y - 30, text: `-${e.dmg}`, color: '#ffd400' }); }
-    if (e.type === 'playerHit') { effects.push({ type: 'spark', t0: now, x: e.x, y: e.y }, { type: 'popup', t0: now, x: e.x, y: e.y - 30, text: `-${e.dmg}`, color: '#ff5a5a' }, { type: 'flash', t0: now }); jolt = { t0: now, dir: e.dir }; }
-    if (e.type === 'block') effects.push({ type: 'popup', t0: now, x: e.x, y: e.y - 30, text: 'BLOCK', color: '#7cf' });
+    if (e.type === 'oppHit') { play(e.dmg >= CONFIG.kickDmg ? 'kick' : 'punch'); effects.push({ type: 'spark', t0: now, x: e.x, y: e.y }, { type: 'popup', t0: now, x: e.x, y: e.y - 30, text: `-${e.dmg}`, color: '#ffd400' }); }
+    if (e.type === 'playerHit') { play('hit'); effects.push({ type: 'spark', t0: now, x: e.x, y: e.y }, { type: 'popup', t0: now, x: e.x, y: e.y - 30, text: `-${e.dmg}`, color: '#ff5a5a' }, { type: 'flash', t0: now }); jolt = { t0: now, dir: e.dir }; }
+    if (e.type === 'ko') { play('ko'); music.pause(); }
+    if (e.type === 'stepBack') play('block');
+    if (e.type === 'block') { play('block'); } if (e.type === 'block') effects.push({ type: 'popup', t0: now, x: e.x, y: e.y - 30, text: 'BLOCK', color: '#7cf' });
   }
   effects = pruneEffects(effects, now);
 
@@ -71,9 +97,11 @@ function loop() {
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, Hc);
   ctx.drawImage(video, jx, 0, W, Hc);
 
-  if (state.player.geom && state.boxes && state.phase !== 'calibrating') drawOpponent(ctx, sprites, state.opp, state.boxes, state.player.facing, state.player.H, now);
+  if (state.player.geom && state.boxes && state.phase !== 'calibrate') drawOpponent(ctx, sprites, state.opp, state.boxes, state.player.facing, state.player.H, now);
   drawEffects(ctx, W, Hc, effects, now);
   drawHUD(ctx, W, state, CONFIG);
+  if (state.phase === 'calibrate') drawCalibration(ctx, W, Hc, state, lmsPx);
+  if (state.phase === 'ready') drawReady(ctx, W, Hc, state);
   if (debug && lmsPx) drawDebug(ctx, lmsPx, state);
   requestAnimationFrame(loop);
 }

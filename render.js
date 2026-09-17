@@ -48,7 +48,7 @@ export function drawHUD(ctx, W, state, cfg) {
   bar(ctx, W - 20 - barW, y, barW, barH, (leftIsYou ? o.hp : p.hp) / cfg.maxHp, leftIsYou ? 'RYU' : 'YOU', 'right');
   ctx.textAlign = 'center'; ctx.fillStyle = '#ffd400'; ctx.font = 'bold 26px "Courier New", monospace';
   ctx.strokeStyle = '#000'; ctx.lineWidth = 4;
-  const centerMsg = state.phase === 'calibrating' ? 'STAND IN STANCE...' : state.noBody ? 'STEP INTO FRAME' : state.phase === 'ko' ? '' : 'FIGHT';
+  const centerMsg = state.phase === 'calibrate' ? 'CALIBRATION' : state.noBody ? 'STEP INTO FRAME' : state.phase === 'ready' ? 'READY' : state.phase === 'ko' ? '' : 'FIGHT';
   if (centerMsg) { ctx.strokeText(centerMsg, W / 2, y + 18); ctx.fillText(centerMsg, W / 2, y + 18); }
   if (state.phase === 'ko') {
     ctx.font = 'bold 96px "Courier New", monospace'; ctx.lineWidth = 8;
@@ -57,6 +57,10 @@ export function drawHUD(ctx, W, state, cfg) {
     const msg = state.winner === 'YOU' ? 'YOU WIN' : 'RYU WINS';
     ctx.strokeText(msg, W / 2, 250); ctx.fillText(msg, W / 2, 250);
     ctx.font = '20px "Courier New", monospace'; ctx.strokeText('press R to restart', W / 2, 290); ctx.fillText('press R to restart', W / 2, 290);
+  }
+  if (p.outOfZone && state.phase === 'fighting') {
+    ctx.font = 'bold 56px "Courier New", monospace'; ctx.lineWidth = 6; ctx.strokeStyle = '#000'; ctx.fillStyle = '#ff5a5a';
+    ctx.strokeText('STEP BACK', W / 2, 160); ctx.fillText('STEP BACK', W / 2, 160);
   }
   if (p.blocking && state.phase === 'fighting') { ctx.font = 'bold 20px monospace'; ctx.fillStyle = '#7cf'; ctx.fillText('GUARD', W / 2, y + 48); }
 }
@@ -106,5 +110,46 @@ export function drawDebug(ctx, lmsPx, state) {
     `ankle lift ${(d.lift ?? 0).toFixed(2)}  vx ${(d.avx ?? 0).toFixed(2)}  blocking ${!!state.player.blocking}`,
   ];
   lines.forEach((l, i) => ctx.fillText(l, 12, 90 + i * 18));
+  ctx.restore();
+}
+
+// Calibration screen: checklist with pass/fail, hold progress, framing guide.
+export function drawCalibration(ctx, W, Hc, state, lmsPx) {
+  const c = state.calib;
+  ctx.save();
+  if (lmsPx && state.player.geom) drawSkeleton(ctx, lmsPx, '#0f0');
+  const x = 30, y0 = 110, lh = 34;
+  const checks = c.checks && c.checks.length ? c.checks : [{ ok: false, msg: 'Step into frame: whole body visible' }];
+  ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(x - 14, y0 - 40, 620, checks.length * lh + 110);
+  ctx.font = 'bold 22px "Courier New", monospace'; ctx.textAlign = 'left'; ctx.fillStyle = '#ffd400';
+  ctx.fillText('Stand side-on in fighting stance. Hold still.', x, y0 - 12);
+  ctx.font = '20px "Courier New", monospace';
+  checks.forEach((k, i) => {
+    ctx.fillStyle = k.ok ? '#3ddc5a' : '#ff5a5a';
+    ctx.fillText((k.ok ? '\u2714 ' : '\u2716 ') + k.msg, x, y0 + 20 + i * lh);
+  });
+  const allOk = checks.every((k) => k.ok);
+  const py = y0 + 30 + checks.length * lh;
+  ctx.fillStyle = '#333'; ctx.fillRect(x, py, 560, 18);
+  ctx.fillStyle = allOk ? '#3ddc5a' : '#666'; ctx.fillRect(x, py, 560 * (allOk ? (c.progress || 0) : 0), 18);
+  ctx.fillStyle = '#ccc'; ctx.font = '16px "Courier New", monospace';
+  ctx.fillText(allOk ? 'Locking scale...' : 'Fix the red items above', x, py + 38);
+  ctx.restore();
+}
+
+export function drawReady(ctx, W, Hc, state) {
+  ctx.save(); ctx.textAlign = 'center'; ctx.lineWidth = 6; ctx.strokeStyle = '#000';
+  ctx.font = 'bold 40px "Courier New", monospace'; ctx.fillStyle = '#fff';
+  ctx.strokeText('press SPACE to FIGHT', W / 2, Hc / 2); ctx.fillText('press SPACE to FIGHT', W / 2, Hc / 2);
+  ctx.font = '20px "Courier New", monospace'; ctx.fillStyle = '#ccc'; ctx.lineWidth = 4;
+  const msg = `scale locked: body ${Math.round(state.lock.H)} px, facing ${state.lock.facing === 1 ? 'right' : 'left'}   |   C = recalibrate`;
+  ctx.strokeText(msg, W / 2, Hc / 2 + 40); ctx.fillText(msg, W / 2, Hc / 2 + 40);
+  ctx.restore();
+}
+
+export function drawSkeleton(ctx, lmsPx, color) {
+  const pairs = [[11, 13], [13, 15], [12, 14], [14, 16], [11, 12], [11, 23], [12, 24], [23, 24], [23, 25], [25, 27], [24, 26], [26, 28], [0, 11], [0, 12]];
+  ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = 3;
+  for (const [a, b] of pairs) if (lmsPx[a] && lmsPx[b] && lmsPx[a].visibility > 0.5 && lmsPx[b].visibility > 0.5) { ctx.beginPath(); ctx.moveTo(lmsPx[a].x, lmsPx[a].y); ctx.lineTo(lmsPx[b].x, lmsPx[b].y); ctx.stroke(); }
   ctx.restore();
 }
