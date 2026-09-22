@@ -1,9 +1,8 @@
 # Almost Real Street Fighter
 
-### Fighting games are fun. Real fights are more fun. Real fights also hurt. We found the gap in the market.
-
-Playing street fighting games is COOL. Being in a street fight is, objectively, COOLER. It is
+### Playing street fighting games is COOL. Being in a street fight is, objectively, COOLER. It is
 also a great way to lose teeth. So here is the next best thing.
+
 
 Every fighting game ever made puts a wall between you and the fight: a controller, a keyboard,
 a headset. ***LET'S STEP INTO THE GAME!*** You walk up to a laptop, turn side-on, and you are
